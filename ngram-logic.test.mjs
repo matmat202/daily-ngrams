@@ -11,27 +11,34 @@ const ok = (name, cond, extra = '') => {
 const eq = (name, a, b) => ok(name, JSON.stringify(a) === JSON.stringify(b), `got ${JSON.stringify(a)} want ${JSON.stringify(b)}`);
 
 // --- bins ---------------------------------------------------------------------------
-eq('25 five-year bins', L.BINS.length, 25);
+const PRINT = L.BINS.filter((b) => b.src === 'print'), WEB = L.BINS.filter(L.isWeb);
+eq('25 scanned five-year bins', PRINT.length, 25);
+eq('3 web bins', WEB.map(L.binLabel), ['2015–19', '2020–24', '2025–26']);
+eq('every bin names its source', L.BINS.every((b) => b.src === 'print' || b.src === 'web'), true);
+eq('scans come first, then the web, never interleaved', L.BINS.findIndex(L.isWeb), 25);
 eq('first bin starts at the first issue', L.BINS[0].start, '1892-09-19');
 eq('first bin label is clipped', L.binLabel(L.BINS[0]), '1892–94');
-eq('last bin ends at the last issue', L.BINS.at(-1).end, '2014-06-13');
-eq('last bin years', [L.BINS.at(-1).y0, L.BINS.at(-1).y1], [2010, 2014]);
-// contiguous: each bin starts the day after the previous one ends, so no article is
-// counted twice or dropped between bins
-let contiguous = true;
-for (let i = 1; i < L.BINS.length; i++) {
-  const prev = new Date(L.BINS[i - 1].end + 'T00:00:00Z');
-  const next = new Date(L.BINS[i].start + 'T00:00:00Z');
-  if (next - prev !== 86400000) contiguous = false;
-}
-ok('bins are contiguous with no gap or overlap', contiguous);
+eq('last scanned bin ends at the last issue', PRINT.at(-1).end, '2014-06-13');
+eq('last scanned bin years', [PRINT.at(-1).y0, PRINT.at(-1).y1], [2010, 2014]);
+eq('web starts on WEB_FIRST', WEB[0].start, L.WEB_FIRST);
+eq('web ends on WEB_LAST, the day the baked totals stop', WEB.at(-1).end, L.WEB_LAST);
+ok('the two sources share no day', PRINT.at(-1).end < WEB[0].start);
+// contiguous within a source: each bin starts the day after the previous one ends, so no
+// article is counted twice or dropped between bins
+const contig = (bs) => bs.every((b, i) => i === 0 ||
+  new Date(b.start + 'T00:00:00Z') - new Date(bs[i - 1].end + 'T00:00:00Z') === 86400000);
+ok('scanned bins are contiguous with no gap or overlap', contig(PRINT));
+ok('web bins are contiguous with no gap or overlap', contig(WEB));
 
 // --- years inside a bin (the click drill-down) -------------------------------------
 {
   const ys = L.BINS.flatMap(L.yearBins);
-  eq('123 years in the run', ys.length, 123);
+  eq('135 years in the run (123 scanned, 12 web)', ys.length, 135);
+  eq('years run 1892..2026 with no year twice', ys.map((y) => y.y0), Array.from({ length: 135 }, (_, i) => 1892 + i));
   eq('first year starts at the first issue', ys[0].start, '1892-09-19');
-  eq('last year ends at the last issue', ys.at(-1).end, '2014-06-13');
+  eq('last scanned year ends at the last issue', ys[122].end, '2014-06-13');
+  eq('last year ends on WEB_LAST', ys.at(-1).end, L.WEB_LAST);
+  eq('a year keeps its bin\'s source', [ys[122].src, ys[123].src], ['print', 'web']);
   eq('a full bin has five years', L.yearBins(L.BINS[10]).map((b) => b.y0), [1940, 1941, 1942, 1943, 1944]);
   eq('the clipped first bin has three', L.yearBins(L.BINS[0]).map((b) => b.y0), [1892, 1893, 1894]);
   // a bin's years tile it exactly: same first day, same last day, one day apart
@@ -49,6 +56,9 @@ ok('bins are contiguous with no gap or overlap', contiguous);
   const r = L.yearRates([10, 20, 30, 40, 50], L.BINS[10], tot);
   eq('yearRates divides by each year\'s own total', r.map((x) => +x.toFixed(4)),
     [1940, 1941, 1942, 1943, 1944].map((y, k) => +(((k + 1) * 10) / (1000 + y - 1892) * 1e4).toFixed(4)));
+  const tot2 = Array.from({ length: 135 }, () => 1000);
+  eq('yearRates divides web years by the scale', L.yearRates([20, 40], WEB[2], tot2, 2), [100, 200]);
+  eq('yearRates leaves scanned years alone', L.yearRates([20], L.BINS[0], tot2, 2).slice(0, 1), [200]);
 }
 
 // --- terms --------------------------------------------------------------------------
@@ -85,6 +95,30 @@ const au = new URL(L.archiveUrl('big game', b));
 eq('archive link is the archive search page', au.origin + au.pathname, 'https://archives.stanforddaily.com/search');
 eq('archive link carries the phrase', au.searchParams.get('article_text'), '"big game"');
 eq('archive link carries the dates', [au.searchParams.get('start_date'), au.searchParams.get('end_date')], [b.start, b.end]);
+
+// --- the web source ---------------------------------------------------------------
+{
+  const w = WEB[0];
+  eq('a web bin counts from the web', new URL(L.countUrl('war', w)).origin, 'https://stanforddaily.com');
+  const u = new URL(L.webCountUrl('war', w));
+  eq('web count asks for one post, ids only', [u.searchParams.get('per_page'), u.searchParams.get('_fields')], ['1', 'id']);
+  eq('web count searches the word', u.searchParams.get('search'), 'war');
+  eq('web after is one second before the first day', u.searchParams.get('after'), '2014-12-31T23:59:59');
+  eq('web before is midnight after the last day', u.searchParams.get('before'), '2020-01-01T00:00:00');
+  eq('null term counts every post', new URL(L.webCountUrl(null, w)).searchParams.has('search'), false);
+  // adjacent web bins: one's before is the next one's after + 1 s, so no post is in both
+  const a = new URL(L.webCountUrl('x', WEB[0])).searchParams.get('before');
+  const n = new URL(L.webCountUrl('x', WEB[1])).searchParams.get('after');
+  eq('adjacent web bins meet at the second', Date.parse(a + 'Z') - Date.parse(n + 'Z'), 1000);
+  ok('one word counts on the web', L.webCounts('war'));
+  ok('a phrase does not', !L.webCounts('big game'));
+  ok('a hyphenated word does not', !L.webCounts('co-ed'));
+  const r = new URL(L.archiveUrl('war', w));
+  eq('web reading link is the site search', r.origin + r.pathname + r.search, 'https://stanforddaily.com/?s=war');
+  const bs = [L.BINS[0], WEB[0], WEB[1]];
+  eq('scaled divides web rates only', L.scaled([12, 12, null], bs, 1.2).map((x) => x == null ? x : +x.toFixed(6)), [12, 10, null]);
+  eq('scaled ignores a bad scale', L.scaled([12, 12], bs, 0), [12, 12]);
+}
 
 // --- rates & peak -------------------------------------------------------------------
 eq('rate per 10k', L.rates([5, 0], [10000, 20000]), [5, 0]);
@@ -141,9 +175,17 @@ eq('empty state', L.encodeState([]), '');
 const here = fileURLToPath(new URL('.', import.meta.url));
 const D = JSON.parse(readFileSync(here + 'data/presets.json', 'utf8'));
 eq('data bins are the logic bins', D.bins, L.BINS);
-ok('every bin has articles', D.totals.length === 25 && D.totals.every((t) => t > 1000), JSON.stringify(D.totals));
-ok('about 695k articles', Math.abs(D.totals.reduce((a, c) => a + c, 0) - 695000) < 20000);
-ok('123 per-year totals', Array.isArray(D.yearTotals) && D.yearTotals.length === 123 && D.yearTotals.every((t) => t > 0));
+ok('every bin has articles', D.totals.length === L.BINS.length && D.totals.every((t) => t > 1000), JSON.stringify(D.totals));
+ok('about 695k scanned articles', Math.abs(D.totals.slice(0, 25).reduce((a, c) => a + c, 0) - 695000) < 20000);
+ok('135 per-year totals', Array.isArray(D.yearTotals) && D.yearTotals.length === 135 && D.yearTotals.every((t) => t > 0));
+eq('data was counted to the day the logic stops at', D.webLast, L.WEB_LAST);
+{
+  const rs = Object.values(D.calibration.ratios).sort((a, b) => a - b);
+  const med = rs.length % 2 ? rs[(rs.length - 1) / 2] : (rs[rs.length / 2 - 1] + rs[rs.length / 2]) / 2;
+  ok('at least 8 words calibrate the splice', rs.length >= 8, String(rs.length));
+  ok('webScale is the median ratio', Math.abs(D.webScale - med) < 0.001, `${D.webScale} vs ${med}`);
+  ok('webScale is a plausible splice (0.5-2)', D.webScale >= 0.5 && D.webScale <= 2, String(D.webScale));
+}
 eq('per-year totals add up to each bin', L.BINS.map((b) => L.yearBins(b).reduce((a, y) => a + D.yearTotals[y.y0 - L.YEAR0], 0)), D.totals);
 ok('at least five presets', D.presets.length >= 5);
 for (const p of D.presets) {
@@ -151,8 +193,10 @@ for (const p of D.presets) {
   for (const t of p.terms) {
     eq(`preset term "${t}" is already clean`, L.cleanTerm(t), t);
     const c = D.counts[t];
-    ok(`preset term "${t}" has 25 counts`, Array.isArray(c) && c.length === 25 && c.every(Number.isInteger));
-    ok(`preset term "${t}" is never more than every article`, c.every((n, i) => n <= D.totals[i]));
+    ok(`preset term "${t}" has a count per bin`, Array.isArray(c) && c.length === L.BINS.length &&
+      c.every((n, i) => Number.isInteger(n) || (n === null && L.isWeb(L.BINS[i]) && !L.webCounts(t))));
+    ok(`preset term "${t}" has web counts iff it is one word`, c.slice(25).every((n) => (n === null) === !L.webCounts(t)));
+    ok(`preset term "${t}" is never more than every article`, c.every((n, i) => n == null || n <= D.totals[i]));
     ok(`preset term "${t}" is found somewhere`, c.some((n) => n > 0));
   }
 }
@@ -164,6 +208,13 @@ ok('no preset word that the index stems into another word', !D.presets.some((p) 
   const r = L.rates(D.counts.internet, D.totals);
   // OCR noise puts a stray hit or two in early bins (1 of 7,141 articles in 1892-94).
   ok('internet is ~0 before 1990 and peaks after 1995', Math.max(...r.slice(0, 20)) < 2 && L.peak(r) >= 21, JSON.stringify(r.map((x) => +x.toFixed(2))));
+}
+// And the web years have to show something the scans cannot: the pandemic in 2020-24.
+{
+  const r = L.scaled(L.rates(D.counts.pandemic, D.totals), L.BINS, D.webScale);
+  const i2020 = L.BINS.findIndex((b) => b.y0 === 2020);
+  ok('pandemic peaks in 2020-24', L.peak(r) === i2020, JSON.stringify(r.map((x) => x == null ? x : +x.toFixed(1))));
+  ok('pandemic 2020-24 is 10x its 2015-19 rate', r[i2020] > 10 * r[i2020 - 1]);
 }
 
 console.log(`${fail ? 'FAILED' : 'ok'}: ${pass} passed, ${fail} failed`);

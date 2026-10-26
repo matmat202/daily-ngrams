@@ -1,6 +1,7 @@
 import {
   BINS, binLabel, parseTerms, countUrl, archiveUrl, rates, peak, niceTicks,
   fmtRate, encodeState, decodeState, mapLimit, yearBins, yearRates,
+  isWeb, scaled, webCounts,
 } from './ngram-logic.js';
 
 const $ = (id) => document.getElementById(id);
@@ -32,6 +33,14 @@ function setStatus(msg, err = false) {
 }
 
 async function fetchCount(term, b) {
+  if (isWeb(b)) {
+    if (!webCounts(term)) return null; // a phrase: WordPress would count its words apart
+    const r = await fetch(countUrl(term, b));
+    if (!r.ok) throw new Error(`stanforddaily.com answered ${r.status}`);
+    const n = Number(r.headers.get('X-WP-Total'));
+    if (!Number.isInteger(n) || n < 0) throw new Error('stanforddaily.com sent no count');
+    return n;
+  }
   const r = await fetch(countUrl(term, b));
   if (!r.ok) throw new Error(`archive search answered ${r.status}`);
   const j = await r.json();
@@ -59,10 +68,10 @@ async function fetchYears(term, i) {
 async function drawYears(box, i, isCurrent) {
   const series = current.filter((s) => s.counts[i] > 0);
   if (!series.length) { box.textContent = ''; return; }
-  box.textContent = 'Asking the archive for each year…';
+  box.textContent = isWeb(BINS[i]) ? 'Asking stanforddaily.com for each year…' : 'Asking the archive for each year…';
   let got;
   try {
-    got = await Promise.all(series.map(async (s) => ({ s, rates: yearRates(await fetchYears(s.term, i), BINS[i], DATA.yearTotals) })));
+    got = await Promise.all(series.map(async (s) => ({ s, rates: yearRates(await fetchYears(s.term, i), BINS[i], DATA.yearTotals, DATA.webScale) })));
   } catch (e) {
     if (isCurrent()) box.textContent = `Couldn't fetch the years (${e.message}).`;
     return;
@@ -115,13 +124,15 @@ async function show(terms, { push = true } = {}) {
     catch (e) { failed.push(`“${t}” (${e.message})`); }
   }));
   if (id !== runId) return; // a newer search started while this one was in flight
-  current = out.map((s, i) => s && { ...s, slot: i, rates: rates(s.counts, DATA.totals) }).filter(Boolean);
+  current = out.map((s, i) => s && { ...s, slot: i, rates: scaled(rates(s.counts, DATA.totals), BINS, DATA.webScale) }).filter(Boolean);
   draw();
   if (failed.length) {
     setStatus(`Couldn't reach the archive's search for ${failed.join(', ')}. The examples above still work.`, true);
   } else {
-    const none = current.filter((s) => s.counts.every((c) => c === 0)).map((s) => `“${s.term}”`);
-    setStatus(none.length ? `${none.join(', ')}: not found in any article.` : '');
+    const none = current.filter((s) => s.counts.every((c) => !c)).map((s) => `“${s.term}”`);
+    const phrases = current.filter((s) => !webCounts(s.term)).map((s) => `“${s.term}”`);
+    setStatus(none.length ? `${none.join(', ')}: not found in any article.`
+      : phrases.length ? `${phrases.join(', ')}: phrases stop at 2014. The web site's search can't match a phrase, only its words.` : '');
   }
 }
 
@@ -142,7 +153,7 @@ function draw() {
   const y = (r) => M.t + ih - (ih * r) / top;
   const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img',
     'aria-label': current.length
-      ? `Line chart, articles per 10,000 mentioning ${current.map((s) => s.term).join(', ')}, 1892 to 2014`
+      ? `Line chart, articles per 10,000 mentioning ${current.map((s) => s.term).join(', ')}, ${BINS[0].y0} to ${BINS.at(-1).y1}`
       : 'Empty chart' });
 
   const ax = el('g', { class: 'ax' });
@@ -154,18 +165,35 @@ function draw() {
     if (b.y0 % (narrow ? 40 : 20) !== 0 && i !== 0) return;
     ax.append(el('text', { x: x(i), y: H - 8, 'text-anchor': 'middle' }, String(b.y0)));
   });
+  // The seam: scans to the left, the paper's web site to the right.
+  const seam = BINS.findIndex(isWeb);
+  if (seam > 0) {
+    const sx = (x(seam - 1) + x(seam)) / 2;
+    ax.append(el('line', { x1: sx, x2: sx, y1: M.t, y2: M.t + ih, class: 'seam' }));
+    ax.append(el('text', { x: sx + 4, y: M.t + 10, 'text-anchor': 'start', class: 'seamlab' }, 'web'));
+  }
   svg.append(ax);
 
   const labels = [];
   for (const s of current) {
     const c = COLORS[s.slot];
-    let d = '', pen = false;
-    s.rates.forEach((r, i) => {
-      if (r == null) { pen = false; return; }
-      d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)},${y(r).toFixed(1)}`;
-      pen = true;
-    });
-    svg.append(el('path', { d, class: 'ln', stroke: c }));
+    // Two paths: solid over the scans, dashed from the last scanned period on, so the
+    // change of source shows in the line itself and not only in a footnote.
+    const path = (from, to) => {
+      let d = '', pen = false;
+      for (let i = from; i <= to; i++) {
+        const r = s.rates[i];
+        if (r == null) { pen = false; continue; }
+        d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)},${y(r).toFixed(1)}`;
+        pen = true;
+      }
+      return d;
+    };
+    const cut = seam > 0 ? seam - 1 : BINS.length - 1;
+    svg.append(el('path', { d: path(0, cut), class: 'ln', stroke: c }));
+    if (seam > 0) svg.append(el('path', { d: path(cut, BINS.length - 1), class: 'ln web', stroke: c }));
+    // Direct labels only for lines that reach the right edge: a phrase stops at 2014, and a
+    // label out at 2026 would claim a value there. The legend still names it.
     const last = s.rates.length - 1;
     if (s.rates[last] != null) labels.push({ s, y: y(s.rates[last]) });
     const p = peak(s.rates);
@@ -209,8 +237,9 @@ function draw() {
     dots.replaceChildren(...current.filter((s) => s.rates[i] != null)
       .map((s) => el('circle', { cx: x(i), cy: y(s.rates[i]), r: 4.5, class: 'dot', fill: COLORS[s.slot] })));
     const b = BINS[i];
-    tip.innerHTML = `<h3>${b.y0}–${b.y1}</h3><table></table><div class="links"></div>` +
-      `<div style="font-size:11px;color:var(--ink-3);margin-top:4px">${DATA.totals[i].toLocaleString('en-US')} articles that period</div>` +
+    const web = isWeb(b);
+    tip.innerHTML = `<h3>${b.y0}–${b.y1}${web ? ' · web' : ''}</h3><table></table><div class="links"></div>` +
+      `<div style="font-size:11px;color:var(--ink-3);margin-top:4px">${DATA.totals[i].toLocaleString('en-US')} ${web ? 'posts on stanforddaily.com' : 'articles'} that period</div>` +
       `<div class="years">${pinned === i ? '' : 'Click to see each year.'}</div>`;
     const tb = tip.querySelector('table');
     const links = tip.querySelector('.links');
@@ -218,12 +247,12 @@ function draw() {
       const tr = document.createElement('tr');
       tr.innerHTML = `<td><span class="sw" style="background:${COLORS[s.slot]}"></span></td><td class="v"></td>`;
       tr.children[0].append(s.term);
-      tr.children[1].textContent = `${fmtRate(s.rates[i])}  (${s.counts[i].toLocaleString('en-US')})`;
+      tr.children[1].textContent = s.counts[i] == null ? 'phrase: not counted' : `${fmtRate(s.rates[i])}  (${s.counts[i].toLocaleString('en-US')})`;
       tb.append(tr);
       if (s.counts[i] > 0) {
         const a = document.createElement('a');
         a.href = archiveUrl(s.term, b); a.target = '_blank'; a.rel = 'noopener';
-        a.textContent = `Read “${s.term}”, ${b.y0}–${b.y1} →`;
+        a.textContent = web ? `Search “${s.term}” on stanforddaily.com →` : `Read “${s.term}”, ${b.y0}–${b.y1} →`;
         links.append(a);
       }
     }
@@ -275,6 +304,7 @@ async function main() {
     return;
   }
   for (const [w, c] of Object.entries(DATA.counts)) cache.set(w, c);
+  if (DATA.webScale > 0) $('scale').textContent = DATA.webScale.toFixed(2);
   const ul = $('presets');
   for (const p of DATA.presets) {
     const li = document.createElement('li');

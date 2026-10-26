@@ -3,11 +3,24 @@
 **<https://matmat202.github.io/daily-ngrams/>**
 
 Type a word and see how often *The Stanford Daily* printed it, every five years from
-1892 to 2014. The data is every digitised article in the paper's own archive, about
-695,000 of them. Compare up to four words; hover or tap a period to read those articles.
+1892 to today. To mid-2014 the data is every digitised article in the paper's own
+archive, about 695,000 of them; from 2015 it is the paper's web site, stanforddaily.com. Compare up to four words; hover or tap a period to read those articles.
 
 Try `indians, cardinal` (the mascot changed in 1972 and the paper took a decade to follow),
-`computer, internet, email`, or `war, draft, protest`.
+`computer, internet, email`, `war, draft, protest`, or `pandemic, zoom` (2020).
+
+## Two sources, one line
+
+The scans stop in June 2014. From 2015 the page asks stanforddaily.com's WordPress search
+instead (`/wp-json/wp/v2/posts?search=…&per_page=1`, which returns the count in the
+`X-WP-Total` header), and draws that part of the line dashed.
+
+The two are not the same corpus, so the web rate is **divided by a measured factor**.
+`build.py` counts the same single words in both for 2010–13, the years both cover, and
+takes the median of web rate / scan rate. That was 1.21 over 16 words in October 2026,
+and every word fell between 1.08 and 1.37. So the web posts mention a given word about a
+fifth more often than the printed articles did. The build refuses to splice if the
+factor leaves 0.5–2.
 
 ## How the numbers are made
 
@@ -29,6 +42,11 @@ is down.
   so it is not offered as an example and its chart would mean nothing.
 - **Early issues are OCR scans**, so early counts are lower bounds and a stray hit before
   1990 for `internet` is a misread, not a prophecy.
-- **It ends in mid-2014**, where the digitised archive does.
+- **A phrase stops at 2014.** The web search ANDs a phrase's words and ignores quotes
+  (`big game` came out 6.5x the scans' phrase rate in 2010–13), so phrases get no web
+  points rather than wrong ones.
+- **The web search skips very common words** (`the` returns nothing), so those drop to
+  zero at 2015 for a reason that is only the search engine.
+- **There is a half-year gap**, June to December 2014, between the two sources.
 
 Not affiliated with The Stanford Daily. Built by Claude.
