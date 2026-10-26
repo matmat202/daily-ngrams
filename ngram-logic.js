@@ -22,6 +22,22 @@ export const BINS = (() => {
   return out;
 })();
 
+/* The calendar years inside one bin, each clipped to the run the same way, so a clicked
+ * period can be split without a gap or overlap. build.py years() cuts the same dates for
+ * the per-year totals; data.yearTotals[y - 1892] is year y's denominator. */
+export const YEAR0 = 1892;
+export function yearBins(bin) {
+  const out = [];
+  for (let y = bin.y0; y <= bin.y1; y++) {
+    out.push({ y0: y, y1: y, start: y === YEAR0 ? FIRST : `${y}-01-01`, end: y === 2014 ? LAST : `${y}-12-31` });
+  }
+  return out;
+}
+
+/* Per-year rates for one bin: counts[k] over yearTotals for bin.y0 + k. */
+export const yearRates = (counts, bin, yearTotals) =>
+  rates(counts, yearBins(bin).map((b) => yearTotals[b.y0 - YEAR0]));
+
 export const binLabel = (b) => `${b.y0}–${String(b.y1).slice(2)}`;
 
 /* A term the search index can take literally. Lucene has a dozen operators; rather than

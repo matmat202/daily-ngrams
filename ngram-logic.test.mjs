@@ -26,6 +26,31 @@ for (let i = 1; i < L.BINS.length; i++) {
 }
 ok('bins are contiguous with no gap or overlap', contiguous);
 
+// --- years inside a bin (the click drill-down) -------------------------------------
+{
+  const ys = L.BINS.flatMap(L.yearBins);
+  eq('123 years in the run', ys.length, 123);
+  eq('first year starts at the first issue', ys[0].start, '1892-09-19');
+  eq('last year ends at the last issue', ys.at(-1).end, '2014-06-13');
+  eq('a full bin has five years', L.yearBins(L.BINS[10]).map((b) => b.y0), [1940, 1941, 1942, 1943, 1944]);
+  eq('the clipped first bin has three', L.yearBins(L.BINS[0]).map((b) => b.y0), [1892, 1893, 1894]);
+  // a bin's years tile it exactly: same first day, same last day, one day apart
+  let tiles = true;
+  for (const b of L.BINS) {
+    const y = L.yearBins(b);
+    if (y[0].start !== b.start || y.at(-1).end !== b.end) tiles = false;
+    for (let i = 1; i < y.length; i++) {
+      if (new Date(y[i].start + 'T00:00:00Z') - new Date(y[i - 1].end + 'T00:00:00Z') !== 86400000) tiles = false;
+    }
+  }
+  ok("each bin's years tile it with no gap or overlap", tiles);
+  // the rate for year k must divide by year k's own total, not the bin's or a neighbour's
+  const tot = Array.from({ length: 123 }, (_, i) => 1000 + i);
+  const r = L.yearRates([10, 20, 30, 40, 50], L.BINS[10], tot);
+  eq('yearRates divides by each year\'s own total', r.map((x) => +x.toFixed(4)),
+    [1940, 1941, 1942, 1943, 1944].map((y, k) => +(((k + 1) * 10) / (1000 + y - 1892) * 1e4).toFixed(4)));
+}
+
 // --- terms --------------------------------------------------------------------------
 eq('lower-cased and trimmed', L.cleanTerm('  Computer '), 'computer');
 eq('lucene operators dropped', L.cleanTerm('war* AND (peace)'), 'war and peace');
@@ -118,6 +143,8 @@ const D = JSON.parse(readFileSync(here + 'data/presets.json', 'utf8'));
 eq('data bins are the logic bins', D.bins, L.BINS);
 ok('every bin has articles', D.totals.length === 25 && D.totals.every((t) => t > 1000), JSON.stringify(D.totals));
 ok('about 695k articles', Math.abs(D.totals.reduce((a, c) => a + c, 0) - 695000) < 20000);
+ok('123 per-year totals', Array.isArray(D.yearTotals) && D.yearTotals.length === 123 && D.yearTotals.every((t) => t > 0));
+eq('per-year totals add up to each bin', L.BINS.map((b) => L.yearBins(b).reduce((a, y) => a + D.yearTotals[y.y0 - L.YEAR0], 0)), D.totals);
 ok('at least five presets', D.presets.length >= 5);
 for (const p of D.presets) {
   ok(`preset ${p.id} has 1-4 terms`, p.terms.length >= 1 && p.terms.length <= L.MAX_TERMS);

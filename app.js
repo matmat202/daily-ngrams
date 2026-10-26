@@ -1,6 +1,6 @@
 import {
   BINS, binLabel, parseTerms, countUrl, archiveUrl, rates, peak, niceTicks,
-  fmtRate, encodeState, decodeState, mapLimit,
+  fmtRate, encodeState, decodeState, mapLimit, yearBins, yearRates,
 } from './ngram-logic.js';
 
 const $ = (id) => document.getElementById(id);
@@ -13,6 +13,7 @@ const M = { l: 44, r: 96, t: 12, b: 28 };
 
 let DATA = null;           // site/data/presets.json
 const cache = new Map();   // term -> counts[]
+const yearCache = new Map(); // `${term}|${bin index}` -> that bin's per-year counts[]
 let current = [];          // [{term, counts, rates}]
 let runId = 0;
 let unpin = () => {}; // set by draw(); Escape closes a pinned tooltip
@@ -30,18 +31,71 @@ function setStatus(msg, err = false) {
   s.classList.toggle('err', err);
 }
 
+async function fetchCount(term, b) {
+  const r = await fetch(countUrl(term, b));
+  if (!r.ok) throw new Error(`archive search answered ${r.status}`);
+  const j = await r.json();
+  const n = j && j.hits && j.hits.found;
+  if (!Number.isFinite(n)) throw new Error('archive search sent an unexpected reply');
+  return n;
+}
+
 async function fetchCounts(term) {
   if (cache.has(term)) return cache.get(term);
-  const counts = await mapLimit(BINS, 5, async (b) => {
-    const r = await fetch(countUrl(term, b));
-    if (!r.ok) throw new Error(`archive search answered ${r.status}`);
-    const j = await r.json();
-    const n = j && j.hits && j.hits.found;
-    if (!Number.isFinite(n)) throw new Error('archive search sent an unexpected reply');
-    return n;
-  });
+  const counts = await mapLimit(BINS, 5, (b) => fetchCount(term, b));
   cache.set(term, counts);
   return counts;
+}
+
+// Only a clicked (pinned) period asks for its years, never a hover: up to 5 requests per
+// word, on intent, so a mouse sweeping the chart doesn't fire 125 at a student paper.
+async function fetchYears(term, i) {
+  const k = `${term}|${i}`;
+  if (!yearCache.has(k)) yearCache.set(k, mapLimit(yearBins(BINS[i]), 5, (b) => fetchCount(term, b)));
+  try { return await yearCache.get(k); }
+  catch (e) { yearCache.delete(k); throw e; } // a failed fetch may be retried by the next click
+}
+
+async function drawYears(box, i, isCurrent) {
+  const series = current.filter((s) => s.counts[i] > 0);
+  if (!series.length) { box.textContent = ''; return; }
+  box.textContent = 'Asking the archive for each year…';
+  let got;
+  try {
+    got = await Promise.all(series.map(async (s) => ({ s, rates: yearRates(await fetchYears(s.term, i), BINS[i], DATA.yearTotals) })));
+  } catch (e) {
+    if (isCurrent()) box.textContent = `Couldn't fetch the years (${e.message}).`;
+    return;
+  }
+  if (!isCurrent()) return; // another period was pinned meanwhile
+  const ys = yearBins(BINS[i]);
+  const tbl = document.createElement('table');
+  tbl.className = 'yrs';
+  tbl.setAttribute('aria-label', `Articles per 10,000, each year ${ys[0].y0} to ${ys.at(-1).y0}`);
+  const max = got.map((g) => Math.max(...g.rates.filter((r) => r != null), 0));
+  ys.forEach((y, k) => {
+    const tr = document.createElement('tr');
+    const th = document.createElement('th');
+    th.textContent = String(y.y0);
+    tr.append(th);
+    got.forEach((g, j) => {
+      const r = g.rates[k];
+      const td = document.createElement('td');
+      const bar = document.createElement('span');
+      bar.className = 'bar';
+      bar.style.background = COLORS[g.s.slot];
+      bar.style.width = `${max[j] > 0 && r != null ? Math.max(2, (r / max[j]) * 100) : 0}%`;
+      const v = document.createElement('span');
+      v.className = 'v';
+      v.textContent = fmtRate(r);
+      if (r != null && r === max[j] && max[j] > 0) td.classList.add('top');
+      td.append(bar, v);
+      td.title = `${g.s.term}, ${y.y0}`;
+      tr.append(td);
+    });
+    tbl.append(tr);
+  });
+  box.replaceChildren(tbl);
 }
 
 async function show(terms, { push = true } = {}) {
@@ -156,7 +210,8 @@ function draw() {
       .map((s) => el('circle', { cx: x(i), cy: y(s.rates[i]), r: 4.5, class: 'dot', fill: COLORS[s.slot] })));
     const b = BINS[i];
     tip.innerHTML = `<h3>${b.y0}–${b.y1}</h3><table></table><div class="links"></div>` +
-      `<div style="font-size:11px;color:var(--ink-3);margin-top:4px">${DATA.totals[i].toLocaleString('en-US')} articles that period</div>`;
+      `<div style="font-size:11px;color:var(--ink-3);margin-top:4px">${DATA.totals[i].toLocaleString('en-US')} articles that period</div>` +
+      `<div class="years">${pinned === i ? '' : 'Click to see each year.'}</div>`;
     const tb = tip.querySelector('table');
     const links = tip.querySelector('.links');
     for (const s of [...current].sort((a, c) => (c.rates[i] ?? -1) - (a.rates[i] ?? -1))) {
@@ -185,6 +240,10 @@ function draw() {
     const i = +e.target.dataset.i;
     pinned = pinned === i ? -1 : i;
     focus(pinned < 0 ? i : pinned);
+    if (pinned >= 0) {
+      const want = pinned;
+      drawYears(tip.querySelector('.years'), want, () => pinned === want && tip.isConnected);
+    }
   });
   unpin = () => { pinned = -1; focus(-1); };
 
