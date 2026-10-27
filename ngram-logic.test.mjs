@@ -58,6 +58,7 @@ ok('web bins are contiguous with no gap or overlap', contig(WEB));
     [1940, 1941, 1942, 1943, 1944].map((y, k) => +(((k + 1) * 10) / (1000 + y - 1892) * 1e4).toFixed(4)));
   const tot2 = Array.from({ length: 135 }, () => 1000);
   eq('yearRates divides web years by the scale', L.yearRates([20, 40], WEB[2], tot2, 2), [100, 200]);
+  eq('yearRates leaves web years alone with no scale', L.yearRates([20, 40], WEB[2], tot2), [200, 400]);
   eq('yearRates leaves scanned years alone', L.yearRates([20], L.BINS[0], tot2, 2).slice(0, 1), [200]);
 }
 
@@ -118,12 +119,17 @@ eq('archive link carries the dates', [au.searchParams.get('start_date'), au.sear
   const bs = [L.BINS[0], WEB[0], WEB[1]];
   eq('scaled divides web rates only', L.scaled([12, 12, null], bs, 1.2).map((x) => x == null ? x : +x.toFixed(6)), [12, 10, null]);
   eq('scaled ignores a bad scale', L.scaled([12, 12], bs, 0), [12, 12]);
+  eq('a scale under 1 still divides', L.scaled([12, 12], bs, 0.5), [12, 24]);
 }
 
 // --- rates & peak -------------------------------------------------------------------
 eq('rate per 10k', L.rates([5, 0], [10000, 20000]), [5, 0]);
 eq('missing count is null, not 0', L.rates([null, 3], [100, 100]), [null, 300]);
 eq('zero total is null', L.rates([1], [0]), [null]);
+// Compared with ===: JSON (and so eq) writes NaN and Infinity as null too.
+eq('a count that is not a number is null, and so is a missing total', L.rates([NaN, Infinity, 1, null], [10, 10, undefined, 0]).map((x) => x === null), [true, true, true, true]);
+eq('nothing searchable is null', ['!!!', '', '- -', "'", '¿?', null, undefined].map((x) => L.cleanTerm(x) === null), [true, true, true, true, true, true, true]);
+eq('peak: a first bin bigger than the rest', [L.peak([5, 3]), L.peak([5]), L.peak([5, 1, 1])], [0, 0, 0]);
 eq('peak is the max', L.peak([1, 5, 3]), 1);
 eq('peak ties to the earliest', L.peak([2, 5, 5]), 1);
 eq('peak skips nulls', L.peak([null, 2, null]), 1);
@@ -146,6 +152,8 @@ eq('format small', L.fmtRate(1.234), '1.23');
 eq('format tiny', L.fmtRate(0.01234), '0.012');
 eq('format null', L.fmtRate(null), '—');
 eq('format zero', L.fmtRate(0), '0');
+eq('format at each edge', [100, 99.5, 10, 9.99, 1, 0.999].map(L.fmtRate), ['100', '99.5', '10.0', '9.99', '1.00', '1.0']);
+eq('ticks when a quarter of the max is already round', [tk(4), tk(8), tk(20)], [[0, 1, 2, 3, 4], [0, 2, 4, 6, 8], [0, 5, 10, 15, 20]]);
 
 // --- url state ----------------------------------------------------------------------
 eq('state encodes', L.encodeState(['big game', 'axe']), '?q=big%20game,axe');
@@ -174,6 +182,11 @@ eq('empty state', L.encodeState([]), '');
 // --- the shipped data ---------------------------------------------------------------
 const here = fileURLToPath(new URL('.', import.meta.url));
 const D = JSON.parse(readFileSync(here + 'data/presets.json', 'utf8'));
+// build.py cuts the bins and the per-year totals from its own copy of the dates; the page
+// divides by them by position, so its bins must be the same ones, field for field.
+eq('the page\'s bins are build.py\'s', L.BINS, D.bins);
+eq('a year total for every year the bins cover', D.yearTotals.length, L.BINS.at(-1).y1 - L.YEAR0 + 1);
+eq('the bins run to the last day fetched', [L.BINS.at(-1).end, L.WEB_LAST], [D.webLast, D.webLast]);
 eq('data bins are the logic bins', D.bins, L.BINS);
 ok('every bin has articles', D.totals.length === L.BINS.length && D.totals.every((t) => t > 1000), JSON.stringify(D.totals));
 ok('about 695k scanned articles', Math.abs(D.totals.slice(0, 25).reduce((a, c) => a + c, 0) - 695000) < 20000);
