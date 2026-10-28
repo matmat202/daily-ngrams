@@ -77,6 +77,9 @@ export function bins(first, last, step = STEP) {
   }
   return out;
 }
+// 'Department of Physics' -> 'Physics' for the menu; build.py short() does the same.
+export const shortDept = (d) => String(d).replace(/^(Department of|Dept\. of) /, '');
+
 export const binOf = (bs, year) => bs.findIndex((b) => year >= b.y0 && year <= b.y1);
 export const binLabel = (b) => (b.y0 === b.y1 ? String(b.y0) : `${b.y0}–${String(b.y1).slice(2)}`);
 

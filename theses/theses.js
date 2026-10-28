@@ -1,5 +1,5 @@
 import {
-  bins, binLabel, parseTerms, parseRows, totals, counts, rates, examples, peak, niceTicks,
+  bins, binLabel, shortDept, parseTerms, parseRows, totals, counts, rates, examples, peak, niceTicks,
   fmtRate, encodeState, decodeState, VIEW,
 } from './thesis-logic.js';
 
@@ -43,7 +43,7 @@ function show(terms, { push = true } = {}) {
   draw();
   if (!terms.length) { setStatus('Type a word to chart it.'); return; }
   const none = current.filter((s) => s.counts.every((c) => !c)).map((s) => `“${s.term}”`);
-  const where = dept >= 0 ? ` in ${META.depts[dept]}` : '';
+  const where = dept >= 0 ? ` in ${shortDept(META.depts[dept])}` : '';
   setStatus(none.length ? `${none.join(', ')}: in no thesis title${where}.` : '');
 }
 
@@ -219,12 +219,17 @@ async function main() {
   const sel = $('dept');
   // no department pass yet: no filter, not an empty one (.row's display:flex beats [hidden])
   if (!META.depts.length) sel.parentNode.style.display = 'none';
-  META.depts.forEach((d, k) => {
+  // Only departments with META.minDept+ theses are offered; a URL may still name a smaller
+  // one, which then gets its own option rather than a select that shows something else.
+  const menu = [...(META.menu || [])];
+  const st0 = decodeState(location.search, META.depts);
+  if (st0.dept >= 0 && !menu.includes(st0.dept)) menu.unshift(st0.dept);
+  for (const k of menu) {
     const o = document.createElement('option');
     o.value = String(k);
-    o.textContent = `${d} (${META.deptCounts[k].toLocaleString('en-US')})`;
+    o.textContent = `${shortDept(META.depts[k])} (${META.deptCounts[k].toLocaleString('en-US')})`;
     sel.append(o);
-  });
+  }
   const ul = $('presets');
   for (const p of META.presets) {
     const li = document.createElement('li');

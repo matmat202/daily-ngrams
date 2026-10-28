@@ -78,6 +78,9 @@ eq('a term with nothing searchable has no matcher', L.matcher('***'), null);
   eq('examples respect the department', L.examples(rows, bs, 1, 'deep learning', 0), []);
 }
 
+eq('shortDept drops "Department of"', L.shortDept('Department of Physics'), 'Physics');
+eq('shortDept keeps other names', L.shortDept('School of Education'), 'School of Education');
+
 // --- URL state ------------------------------------------------------------------------
 {
   const depts = ['Department of Physics', 'School of Education'];
@@ -112,6 +115,11 @@ if (existsSync(dir + 'theses.tsv')) {
   if (meta.depts.length) {
     const share = rows.filter((r) => r.dept >= 0).length / rows.length;
     ok('most theses carry a department', share > 0.5, `share ${share.toFixed(3)}`);
+    ok('the menu offers only departments with minDept+ theses', meta.menu.every((k) => meta.deptCounts[k] >= meta.minDept));
+    ok('the menu offers every such department', meta.menu.length === meta.deptCounts.filter((n) => n >= meta.minDept).length);
+    const names = meta.menu.map((k) => L.shortDept(meta.depts[k]).toLowerCase());
+    ok('the menu is sorted by short name', names.every((n, i) => i === 0 || names[i - 1] <= n), names.slice(0, 5).join(' | '));
+    ok('Physics is in the menu by its short name', names.includes('physics'));
     eq('department counts match the rows', meta.deptCounts, meta.depts.map((_, k) => rows.filter((r) => r.dept === k).length));
   }
   const bs = L.bins(meta.chartFirst, meta.last);
