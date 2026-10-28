@@ -88,17 +88,48 @@ export function fmtChange(k) {
 }
 
 /* ExploreCourses' own search for a term in one academic year ("2009-10" -> 20092010), so a
- * point on the chart opens the courses behind it. */
-export function searchUrl(term, label) {
+ * point on the chart opens the courses behind it. With a department code, only that
+ * department's (a school has no such filter in ExploreCourses, so it gets the whole year). */
+export function searchUrl(term, label, dept = '') {
   const y0 = Number(label.slice(0, 4));
   const p = new URLSearchParams({ view: 'catalog', q: term, academicYear: `${y0}${y0 + 1}` });
+  if (dept) p.set(`filter-departmentcode-${dept}`, 'on');
   return `${SEARCH}?${p}`;
 }
 
-// URL state: ?q=climate,machine+learning. Read with parseTerms so a hand-edited URL is
+// URL state: ?q=climate,machine+learning&g=CS. Read with parseTerms so a hand-edited URL is
 // cleaned the same way the input box is.
-export const encodeState = (terms) => (terms.length ? `?${new URLSearchParams({ q: terms.join(',') })}` : '');
+export function encodeState(terms, group = '') {
+  const p = new URLSearchParams();
+  if (terms.length) p.set('q', terms.join(','));
+  if (group) p.set('g', group);
+  const s = String(p);
+  return s ? `?${s}` : '';
+}
 export function decodeState(search) {
   const q = new URLSearchParams(search || '').get('q');
   return q == null ? null : parseTerms(q).terms;
+}
+
+/* The group named by ?g=, or null for all of Stanford. Matched on id, ignoring case, so
+ * ?g=cs works; an unknown id is null (everything), never an empty chart. */
+export function decodeGroup(search, groups) {
+  const g = new URLSearchParams(search || '').get('g');
+  if (!g) return null;
+  const want = g.toLowerCase();
+  return (groups || []).find((x) => x.id.toLowerCase() === want) ?? null;
+}
+
+/* The menu: schools first, then each school's departments under it, both by label.
+ * -> [{label, groups}] for <optgroup>s. A department whose school has no group of its
+ * own (too small) still gets listed, under its school's name. */
+export function menu(groups) {
+  const schools = groups.filter((g) => g.kind === 'school').sort((a, b) => a.label.localeCompare(b.label));
+  const out = [{ label: 'Schools', groups: schools }];
+  const by = new Map();
+  for (const g of groups) if (g.kind === 'dept') (by.get(g.school) ?? by.set(g.school, []).get(g.school)).push(g);
+  for (const name of [...by.keys()].sort((a, b) => a.localeCompare(b))) {
+    out.push({ label: name, groups: by.get(name).sort((a, b) => a.label.localeCompare(b.label)) });
+  }
+  return out;
 }

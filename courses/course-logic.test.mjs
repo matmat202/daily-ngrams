@@ -70,6 +70,34 @@ eq('fmtChange none', L.fmtChange(null), '');
   ok('fmtRate is shared, not copied', L.fmtRate === D.fmtRate);
 }
 
+// --- groups (course-dept): URL state, menu, links ---------------------------------------
+{
+  const G = [
+    { id: 'CS', kind: 'dept', label: 'Computer Science', school: 'Engineering' },
+    { id: 'humanities-sciences', kind: 'school', label: 'Humanities & Sciences' },
+    { id: 'HISTORY', kind: 'dept', label: 'History', school: 'Humanities & Sciences' },
+    { id: 'engineering', kind: 'school', label: 'Engineering' },
+    { id: 'AA', kind: 'dept', label: 'Aeronautics and Astronautics', school: 'Engineering' },
+    { id: 'law', kind: 'school', label: 'Law' },
+    { id: 'ANTHRO', kind: 'dept', label: 'Anthropology', school: 'Humanities & Sciences' },
+  ];
+  eq('state with a group round-trips', [L.decodeState(L.encodeState(['ai'], 'CS')), L.decodeGroup(L.encodeState(['ai'], 'CS'), G)?.id], [['ai'], 'CS']);
+  eq('no group leaves no g=', L.encodeState(['ai']), '?q=ai');
+  eq('a group with no terms still encodes', L.encodeState([], 'CS'), '?g=CS');
+  eq('?g= matches ignoring case', L.decodeGroup('?g=cs', G)?.id, 'CS');
+  eq('an unknown ?g= is all of Stanford', L.decodeGroup('?g=NOPE', G), null);
+  eq('no ?g= is all of Stanford', L.decodeGroup('?q=ai', G), null);
+  const m = L.menu(G);
+  // Seven groups given out of order: schools, then each school's departments, all by label.
+  eq('menu sections in order', m.map((x) => x.label), ['Schools', 'Engineering', 'Humanities & Sciences']);
+  eq('schools by label', m[0].groups.map((g) => g.id), ['engineering', 'humanities-sciences', 'law']);
+  eq('departments by label within a school', m[1].groups.map((g) => g.id), ['AA', 'CS']);
+  eq('every group appears once', m.flatMap((x) => x.groups).length, G.length);
+  const u = new URL(L.searchUrl('ai', '2025-26', 'CS'));
+  eq('a department link filters ExploreCourses', u.searchParams.get('filter-departmentcode-CS'), 'on');
+  ok('no department, no filter', ![...new URL(L.searchUrl('ai', '2025-26')).searchParams.keys()].some((k) => k.startsWith('filter-')));
+}
+
 // --- the shipped data, read the way the page reads it ---------------------------------
 const dir = fileURLToPath(new URL('./data/', import.meta.url));
 if (existsSync(dir + 'terms.tsv')) {
@@ -107,6 +135,68 @@ if (existsSync(dir + 'terms.tsv')) {
   // Cross-listing codes are stripped: FEMGEN was in 461 titles of 2025-26 before. What
   // remains is prose ("FEMGEN majors"), at most 8 a year when this was written.
   ok('subject codes are stripped: "femgen" stays rare', (L.lookup(table, 'femgen') || []).every((c) => c < 20), JSON.stringify(L.lookup(table, 'femgen')));
+  // --- groups: each file read the way the page reads it, checked against all of Stanford
+  const groups = meta.groups || [];
+  ok('schools and departments ship', groups.filter((g) => g.kind === 'school').length >= 8 && groups.filter((g) => g.kind === 'dept').length >= 50, `${groups.length} groups`);
+  eq('group ids are unique', new Set(groups.map((g) => g.id)).size, groups.length);
+  eq('group files are unique ignoring case', new Set(groups.map((g) => g.file.toLowerCase())).size, groups.length);
+  const T = new Map();
+  for (const g of groups) {
+    const gt = L.parseTable(readFileSync(dir + 'g/' + g.file, 'utf8'), n);
+    T.set(g.id, gt.table);
+    if (gt.bad || gt.table.size !== g.terms || g.totals.length !== n) { fail++; console.log(`FAIL group ${g.id}: bad ${gt.bad}, ${gt.table.size} terms vs meta ${g.terms}`); continue; }
+    let gover = 0, gunder = 0;
+    for (const [k, cs] of gt.table) {
+      if (cs.reduce((a, b) => a + b, 0) < meta.groupMin) gunder++;
+      if (cs.some((c, i) => c > g.totals[i])) gover++;
+    }
+    if (gover || gunder) { fail++; console.log(`FAIL group ${g.id}: ${gover} terms over its totals, ${gunder} under the floor`); }
+    pass++;
+  }
+  ok('every school or department total fits inside Stanford\'s', groups.every((g) => g.totals.every((t, i) => t <= meta.totals[i])));
+  const schools = groups.filter((g) => g.kind === 'school');
+  // A course is in one department's school or (cross-listed) several, so Stanford's count
+  // lies between the biggest school's and the sum of the schools', plus the few courses of
+  // schools too small to list (meta.unlisted, VPTL's 43). The sum only bounds a term every
+  // school ships: under a school's floor its count is unknown, not 0. A table assigned to
+  // the wrong year, or a school file holding one department, breaks one side.
+  const un = meta.unlisted || meta.years.map(() => 0);
+  let between = 0, checked = 0, full = 0;
+  for (const term of ['the', 'research', 'climate', 'machine learning', 'history', 'ai', 'ethics', 'students']) {
+    const all = L.lookup(table, term);
+    const per = schools.map((g) => T.get(g.id).get(term));
+    const everyone = per.every(Boolean);
+    full += everyone;
+    for (let i = 0; i < n; i++) {
+      checked++;
+      const xs = per.map((cs) => (cs ? cs[i] : 0));
+      if (Math.max(...xs) <= all[i] && (!everyone || all[i] <= xs.reduce((a, b) => a + b, 0) + un[i])) between++;
+    }
+  }
+  eq('Stanford\'s count lies between the largest school\'s and the schools\' sum', between, checked);
+  ok('the sum bound was tested on 3+ terms every school ships', full >= 3, `${full}`);
+  const totalsBetween = meta.totals.every((t, i) => Math.max(...schools.map((g) => g.totals[i])) <= t && t <= schools.reduce((a, g) => a + g.totals[i], 0) + un[i]);
+  ok('the unlisted schools are small', un.reduce((a, b) => a + b, 0) < 500, JSON.stringify(un));
+  ok('Stanford\'s course total lies between the largest school\'s and the sum', totalsBetween);
+  // A department is inside its school: same term, same year, never more courses.
+  let inside = 0, din = 0;
+  for (const g of groups.filter((x) => x.kind === 'dept')) {
+    const s = schools.find((x) => x.label === g.school);
+    if (!s) continue;
+    din++;
+    const dt = T.get(g.id), st = T.get(s.id);
+    if (g.totals.some((t, i) => t > s.totals[i])) continue;
+    let okd = true;
+    for (const [k, cs] of dt) { const sc = st.get(k); if (sc && cs.some((c, i) => c > sc[i])) { okd = false; break; } }
+    if (okd) inside++;
+  }
+  ok('every department sits inside its school', din > 50 && inside === din, `${inside}/${din}`);
+  // Anti-vacuity, known history: CS uses "machine learning" far more than History does,
+  // and Doerr (sustainability) uses "climate" more than Stanford as a whole.
+  const rate = (id, t) => { const g = groups.find((x) => x.id === id); return L.rates(T.get(id).get(t), g.totals); };
+  const avg = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  ok('CS uses "machine learning" 10x more than Stanford does', avg(rate('CS', 'machine learning')) > 10 * avg(L.rates(L.lookup(table, 'machine learning'), meta.totals)));
+  ok('Doerr uses "climate" 3x more than Stanford does', avg(rate('sustainability-doerr', 'climate')) > 3 * avg(L.rates(L.lookup(table, 'climate'), meta.totals)));
   for (const p of meta.presets) {
     ok(`preset "${p.label}" terms are already keys`, p.terms.every((t) => key(t) === t), JSON.stringify(p.terms));
     ok(`preset "${p.label}" is in the table`, p.terms.every((t) => table.has(t)), JSON.stringify(p.terms.filter((t) => !table.has(t))));

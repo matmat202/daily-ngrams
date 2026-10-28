@@ -105,9 +105,10 @@ footer{font-size:12px;color:var(--ink-2);line-height:1.5;margin:18px 2px 8px}
   </form>
   <p class="refused" id="refused" role="status" aria-live="polite"></p>
   <ul class="presets" id="presets" aria-label="Examples"></ul>
+  <div class="row"><label for="grp">In</label><select id="grp"><option value="">all of Stanford</option></select></div>
 
   <section class="card" aria-labelledby="chartTitle">
-    <h2 id="chartTitle" style="position:absolute;left:-9999px">Courses using each word, per 1,000 courses</h2>
+    <h2 id="chartTitle" style="position:absolute;left:-9999px">Courses using each word, per 1,000 <span id="where">Stanford</span> courses</h2>
     <ul class="legend" id="legend"></ul>
     <p class="status" id="status" role="status" aria-live="polite">Loading the counts…</p>
     <div id="chart"></div>
@@ -116,7 +117,9 @@ footer{font-size:12px;color:var(--ink-2);line-height:1.5;margin:18px 2px 8px}
       counts its plural, so <em>network</em> finds <em>networks</em>; a phrase matches as two adjacent words. <strong>Descriptions
       got longer</strong>: the median went from <span id="len0"></span> to <span id="len1"></span> words, so most words drift up a
       little for that reason alone; a word that rises several-fold has really spread. Hover or tap a year for the counts and a
-      link to those courses.</p>
+      link to those courses. <strong>In</strong> narrows the count to one school or department: each department sits under
+      the school the current bulletin lists it in, in every year, so Earth Sciences’ old departments are in Doerr throughout.
+      A course cross-listed in two departments counts in each.</p>
   </section>
 
   <details id="tableBox">
@@ -126,7 +129,7 @@ footer{font-size:12px;color:var(--ink-2);line-height:1.5;margin:18px 2px 8px}
 
   <footer>Data: <a href="https://explorecourses.stanford.edu/">ExploreCourses</a>, the Registrar’s course bulletin, every
     department in every academic year it serves, fetched <span id="built"></span>. Only counts ship: words and phrases used by
-    fewer than <span id="min"></span> courses across all years are not charted. Built by Claude for
+    fewer than <span id="min"></span> courses across all years (<span id="gmin"></span> within one school or department) are not charted. Built by Claude for
     <a href="https://matmat202.github.io/">matmat202</a>. Not affiliated with Stanford.</footer>
 </main>
 <link rel="modulepreload" href="course-logic.js">

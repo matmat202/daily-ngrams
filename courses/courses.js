@@ -1,6 +1,6 @@
 import {
   parseTerms, parseTable, lookup, rates, change, fmtChange, searchUrl, peak, niceTicks, fmtRate,
-  encodeState, decodeState,
+  encodeState, decodeState, decodeGroup, menu,
 } from './course-logic.js';
 
 const $ = (id) => document.getElementById(id);
@@ -11,7 +11,12 @@ let W = 720, H = 320;
 const M = { l: 44, r: 96, t: 12, b: 28 };
 
 let META = null, TABLE = new Map(), YEARS = [];
+let ALL = null;           // all of Stanford's table, kept while a group is picked
+let GROUP = null;         // META.groups entry, or null for all of Stanford
+let TOTALS = [];          // course totals per year for GROUP (or all)
+const LOADED = new Map(); // group file -> table, fetched once
 let current = [];         // [{term, slot, counts, rates}]; counts null when under the floor
+let lastTerms = [];
 let unpin = () => {};
 
 const el = (tag, attrs = {}, text) => {
@@ -34,15 +39,17 @@ function show(terms, { push = true, refused = [] } = {}) {
   for (const b of document.querySelectorAll('#presets button')) {
     b.setAttribute('aria-pressed', String(b.dataset.terms === terms.join(',')));
   }
-  if (push) history.replaceState(null, '', location.pathname + encodeState(terms));
+  lastTerms = terms;
+  if (push) history.replaceState(null, '', location.pathname + encodeState(terms, GROUP?.id));
   current = terms.map((term, slot) => {
     const cs = lookup(TABLE, term);
-    return { term, slot, counts: cs, rates: cs ? rates(cs, META.totals) : META.totals.map(() => null) };
+    return { term, slot, counts: cs, rates: cs ? rates(cs, TOTALS) : TOTALS.map(() => null) };
   });
   draw();
   if (!terms.length) { setStatus('Type a word to chart it.'); return; }
   const rare = current.filter((s) => !s.counts).map((s) => `“${s.term}”`);
-  setStatus(rare.length ? `${rare.join(', ')}: used by fewer than ${META.minDocs} courses in all ${YEARS.length} years, too rare to chart.` : '');
+  const floor = GROUP ? META.groupMin : META.minDocs;
+  setStatus(rare.length ? `${rare.join(', ')}: used by fewer than ${floor} courses${GROUP ? ` in ${GROUP.label}` : ''} in all ${YEARS.length} years, too rare to chart.` : '');
 }
 
 function draw() {
@@ -62,7 +69,7 @@ function draw() {
   const y = (r) => M.t + ih - (ih * r) / top;
   const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img',
     'aria-label': current.length
-      ? `Line chart, Stanford courses per 1,000 using ${current.map((s) => s.term).join(', ')}, ${YEARS[0]} to ${YEARS.at(-1)}`
+      ? `Line chart, ${GROUP ? GROUP.label : 'Stanford'} courses per 1,000 using ${current.map((s) => s.term).join(', ')}, ${YEARS[0]} to ${YEARS.at(-1)}`
       : 'Empty chart' });
 
   const ax = el('g', { class: 'ax' });
@@ -133,7 +140,9 @@ function draw() {
       .map((s) => el('circle', { cx: x(i), cy: y(s.rates[i]), r: 4.5, class: 'dot', fill: COLORS[s.slot] })));
     tip.innerHTML = '<h3></h3><table></table><div style="font-size:11px;color:var(--ink-3);margin-top:4px"></div><div class="ex"></div>';
     tip.querySelector('h3').textContent = YEARS[i];
-    tip.children[2].textContent = `${num(META.totals[i])} courses that year · median description ${META.medianWords[i]} words`;
+    tip.children[2].textContent = GROUP
+      ? `${num(TOTALS[i])} ${GROUP.label} courses that year`
+      : `${num(TOTALS[i])} courses that year · median description ${META.medianWords[i]} words`;
     const tb = tip.querySelector('table');
     const sorted = [...current].sort((a, c) => (c.rates[i] ?? -1) - (a.rates[i] ?? -1));
     for (const s of sorted) {
@@ -150,7 +159,7 @@ function draw() {
       for (const s of sorted) {
         if (!s.counts?.[i]) continue;
         const a = document.createElement('a');
-        a.href = searchUrl(s.term, YEARS[i]); a.target = '_blank'; a.rel = 'noopener';
+        a.href = searchUrl(s.term, YEARS[i], GROUP?.kind === 'dept' ? GROUP.id : ''); a.target = '_blank'; a.rel = 'noopener';
         a.textContent = `“${s.term}” in ExploreCourses, ${YEARS[i]}`;
         a.style.borderLeft = `3px solid ${COLORS[s.slot]}`;
         a.style.paddingLeft = '6px';
@@ -186,11 +195,40 @@ function drawTable() {
   tbl.append(head);
   YEARS.forEach((label, i) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${label}</td><td>${num(META.totals[i])}</td>`;
+    tr.innerHTML = `<td>${label}</td><td>${num(TOTALS[i])}</td>`;
     for (const s of current) { const td = document.createElement('td'); td.textContent = fmtRate(s.rates[i]); tr.append(td); }
     tbl.append(tr);
   });
   t.replaceChildren(tbl);
+}
+
+/* Switch the chart to a group (null = all of Stanford). Its table is fetched on first use;
+ * while it loads, the old chart stays up rather than flashing "too rare". */
+async function pick(g, { push = true } = {}) {
+  const sel = $('grp');
+  if (g) {
+    if (!LOADED.has(g.file)) {
+      setStatus(`Loading ${g.label}…`);
+      try {
+        const r = await fetch(`data/g/${g.file}`);
+        if (!r.ok) throw new Error(r.status);
+        LOADED.set(g.file, parseTable(await r.text(), YEARS.length).table);
+      } catch (e) {
+        setStatus(`Could not load ${g.label}. Try again.`, true);
+        sel.value = GROUP ? GROUP.id : '';
+        return;
+      }
+    }
+    TABLE = LOADED.get(g.file);
+    TOTALS = g.totals;
+  } else {
+    TABLE = ALL;
+    TOTALS = META.totals;
+  }
+  GROUP = g;
+  sel.value = g ? g.id : '';
+  $('where').textContent = g ? `${g.label}${g.kind === 'dept' ? ` (${g.id})` : ''}` : 'Stanford';
+  show(lastTerms, { push });
 }
 
 async function main() {
@@ -201,7 +239,8 @@ async function main() {
     ]);
     META = m;
     YEARS = META.years;
-    TABLE = parseTable(tsv, YEARS.length).table;
+    TABLE = ALL = parseTable(tsv, YEARS.length).table;
+    TOTALS = META.totals;
   } catch (e) {
     setStatus('Could not load the data. Try reloading.', true);
     return;
@@ -211,6 +250,7 @@ async function main() {
   $('len1').textContent = META.medianWords.at(-1);
   $('built').textContent = META.built;
   $('min').textContent = META.minDocs;
+  $('gmin').textContent = META.groupMin ?? '';
   const ul = $('presets');
   for (const p of META.presets) {
     const li = document.createElement('li');
@@ -227,8 +267,25 @@ async function main() {
   });
   let lastW = innerWidth;
   addEventListener('resize', () => { if (innerWidth !== lastW) { lastW = innerWidth; draw(); } });
+  const sel = $('grp');
+  for (const sec of menu(META.groups || [])) {
+    const og = document.createElement('optgroup');
+    og.label = sec.label;
+    for (const g of sec.groups) {
+      const o = document.createElement('option');
+      o.value = g.id;
+      o.textContent = g.kind === 'dept' ? `${g.label} (${g.id})` : g.label;
+      og.append(o);
+    }
+    sel.append(og);
+  }
+  if (!META.groups?.length) sel.parentNode.style.display = 'none';
+  sel.addEventListener('change', () => pick((META.groups || []).find((g) => g.id === sel.value) ?? null));
   const st = decodeState(location.search);
-  show(st && st.length ? st : META.presets[0].terms, { push: !!st });
+  const g0 = decodeGroup(location.search, META.groups);
+  lastTerms = st && st.length ? st : META.presets[0].terms;
+  if (g0) await pick(g0, { push: !!st });
+  else show(lastTerms, { push: !!st });
 }
 
 main();
