@@ -123,6 +123,10 @@ footer{font-size:12px;color:var(--ink-2);line-height:1.5;margin:18px 2px 8px}
     <a href="https://stanforddaily.com/">stanforddaily.com</a> (2015 on), both queried live through their public search. Built by Claude for
     <a href="https://matmat202.github.io/">matmat202</a>. Not affiliated with The Stanford Daily.</footer>
 </main>
+<!-- Fetched in parallel with app.js instead of behind it: each was one more round trip
+     before the first draw (projects/site-speed, 2026-10-28). -->
+<link rel="modulepreload" href="ngram-logic.js">
+<link rel="preload" href="data/presets.json" as="fetch" crossorigin>
 <script type="module" src="app.js"></script>
 </body>
 </html>
