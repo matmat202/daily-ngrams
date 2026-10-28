@@ -106,6 +106,11 @@ if (existsSync(dir + 'terms.tsv')) {
   const { table, bad } = L.parseTable(readFileSync(dir + 'terms.tsv', 'utf8'), n);
   eq('shipped lines all parse', bad, 0);
   eq('term count matches meta', table.size, meta.terms);
+  // ExploreCourses escapes two or three times, so an unescaped build counts "&quot;" as a word: it charted
+  // "quot" (and 279 phrases like "a quot") until 2026-10-28. "amp" alone is real (op-amp).
+  // Nor the tags a triple escape leaves ("&lt;br&gt;" -> "lt br gt"); "lt" alone is real (Lt. General).
+  const ent = [...table.keys()].filter((k) => /(^| )(quot|nbsp)( |$)|^(lt br|br gt|lt i|i gt|gt lt)$/.test(k));
+  eq('no HTML entity was counted as a word', ent.slice(0, 5), []);
   ok('at least 15 academic years', n >= 15, `got ${n}`);
   ok('years run consecutively', meta.years.every((y, i) => i === 0 || +y.slice(0, 4) === +meta.years[i - 1].slice(0, 4) + 1), meta.years.join(' '));
   ok('every year holds 8,000+ courses', meta.totals.every((t) => t >= 8000), JSON.stringify(meta.totals));
