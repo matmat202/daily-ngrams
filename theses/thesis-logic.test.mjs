@@ -111,6 +111,9 @@ if (existsSync(dir + 'theses.tsv')) {
   eq('first and last year match meta', [rows[0].year, rows.at(-1).year], [meta.first, meta.last]);
   ok('ids are unique', new Set(rows.map((r) => r.id)).size === rows.length);
   ok('every department index is in range', rows.every((r) => r.dept >= -1 && r.dept < meta.depts.length));
+  // build.py CATALOGUE_TAG: [electronic resource] once charted "electronic" at 52x in 2010-19
+  const tagged = rows.filter((r) => /\[(electronic resource|microform|sic)\]/i.test(r.title));
+  eq('no cataloguer tag is left in a title', tagged.length, 0);
   // Departments come from a second fetch pass; when it has run, most rows must carry one.
   if (meta.depts.length) {
     const share = rows.filter((r) => r.dept >= 0).length / rows.length;
