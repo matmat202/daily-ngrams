@@ -9,6 +9,14 @@ archive, about 695,000 of them; from 2015 it is the paper's web site, stanfordda
 Try `indians, cardinal` (the mascot changed in 1972 and the paper took a decade to follow),
 `computer, internet, email`, `war, draft, protest`, or `pandemic, zoom` (2020).
 
+## Thesis titles too
+
+**<https://matmat202.github.io/daily-ngrams/theses/>** does the same for the titles of
+Stanford's theses and dissertations, about 62,000 of them from the 1890s on, taken from
+the [SearchWorks](https://searchworks.stanford.edu/) catalogue. All the titles ship with
+the page, so any word, phrase or prefix (`neur*`) is matched in the browser, for the whole
+university or one department, and a pinned period lists the matching theses.
+
 ## Two sources, one line
 
 The scans stop in June 2014. From 2015 the page asks stanforddaily.com's WordPress search
