@@ -88,6 +88,8 @@ footer{font-size:12px;color:var(--ink-2);line-height:1.5;margin:18px 2px 8px}
 .tip li{margin:2px 0}
 .tip .ex{font-size:11px;color:var(--ink-3);margin-top:6px}
 .nav{font-size:13px;margin:0 0 6px}
+/* iOS Safari zooms the page into any field under 16px when it is tapped (input-zoom) */
+input,select,textarea{font-size:16px!important}
 </style>
 </head>
 <body>
@@ -98,7 +100,7 @@ footer{font-size:12px;color:var(--ink-2);line-height:1.5;margin:18px 2px 8px}
 
   <form id="form" role="search">
     <label for="q" style="position:absolute;left:-9999px">Words to chart</label>
-    <input id="q" name="q" autocomplete="off" spellcheck="false" placeholder="neural, machine learning, deep learning">
+    <input id="q" name="q" autocomplete="off" spellcheck="false" placeholder="neural, deep learning">
     <button class="go" type="submit">Chart</button>
   </form>
   <div class="row"><label for="dept">In</label><select id="dept"><option value="-1">every department</option></select></div>
