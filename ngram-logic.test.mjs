@@ -78,6 +78,11 @@ ok('long input capped', L.cleanTerm('a'.repeat(100)).length <= 40);
 eq('comma list parsed', L.parseTerms('computer, Internet ,big game'), ['computer', 'internet', 'big game']);
 eq('duplicates removed', L.parseTerms('war, War, WAR'), ['war']);
 eq('blanks skipped', L.parseTerms(',,war,,'), ['war']);
+eq('nothing dropped at four', L.droppedTerms('a, b, c, d'), []);
+eq('the fifth and sixth are dropped, in order', L.droppedTerms('a, b, c, d, e, f'), ['e', 'f']);
+eq('a duplicate past four is not "dropped"', L.droppedTerms('a, b, c, d, A, e, e'), ['e']);
+eq('dropped are cleaned', L.droppedTerms('a,b,c,d, Big Game!'), ['big game']);
+eq('nothing dropped from nothing', [L.droppedTerms(''), L.droppedTerms(null)], [[], []]);
 eq('capped at four', L.parseTerms('a1,b2,c3,d4,e5'), ['a1', 'b2', 'c3', 'd4']);
 
 // --- queries ------------------------------------------------------------------------

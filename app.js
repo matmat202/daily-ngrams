@@ -1,7 +1,7 @@
 import {
   BINS, binLabel, parseTerms, countUrl, archiveUrl, rates, peak, niceTicks,
   fmtRate, encodeState, decodeState, mapLimit, yearBins, yearRates,
-  isWeb, scaled, webCounts, tailPlan, applyTail, dayLabel,
+  isWeb, scaled, webCounts, tailPlan, applyTail, dayLabel, droppedTerms,
 } from './ngram-logic.js';
 
 const $ = (id) => document.getElementById(id);
@@ -151,7 +151,7 @@ async function drawYears(box, i, isCurrent) {
   box.replaceChildren(tbl);
 }
 
-async function show(terms, { push = true, quiet = false } = {}) {
+async function show(terms, { push = true, quiet = false, dropped = [] } = {}) {
   const id = ++runId;
   shown = terms;
   $('q').value = terms.join(', ');
@@ -177,7 +177,8 @@ async function show(terms, { push = true, quiet = false } = {}) {
     const none = current.filter((s) => s.counts.every((c) => !c)).map((s) => `“${s.term}”`);
     const phrases = current.filter((s) => !webCounts(s.term)).map((s) => `“${s.term}”`);
     setStatus(none.length ? `${none.join(', ')}: not found in any article.`
-      : phrases.length ? `${phrases.join(', ')}: phrases stop at 2014. The web site's search can't match a phrase, only its words.` : '');
+      : phrases.length ? `${phrases.join(', ')}: phrases stop at 2014. The web site's search can't match a phrase, only its words.`
+      : dropped.length ? `Four words at a time: left out ${dropped.map((t) => `“${t}”`).join(', ')}.` : '');
   }
 }
 
@@ -361,7 +362,7 @@ async function main() {
     li.append(b); ul.append(li);
   }
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') unpin(); });
-  $('form').addEventListener('submit', (e) => { e.preventDefault(); show(parseTerms($('q').value)); });
+  $('form').addEventListener('submit', (e) => { e.preventDefault(); const v = $('q').value; show(parseTerms(v), { dropped: droppedTerms(v) }); });
   let lastW = innerWidth;
   addEventListener('resize', () => { if (innerWidth !== lastW) { lastW = innerWidth; draw(); } });
   const fromUrl = decodeState(location.search);

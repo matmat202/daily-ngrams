@@ -124,6 +124,17 @@ export function parseTerms(input) {
   return out;
 }
 
+/* The clean, distinct terms parseTerms leaves out past MAX_TERMS, so the page can say so
+ * instead of charting four of five without a word. */
+export function droppedTerms(input) {
+  const kept = new Set(parseTerms(input)), seen = new Set(), out = [];
+  for (const raw of String(input ?? '').split(',')) {
+    const t = cleanTerm(raw);
+    if (t && !kept.has(t) && !seen.has(t)) { seen.add(t); out.push(t); }
+  }
+  return out;
+}
+
 // One word is a term query; anything with a space or hyphen is a phrase.
 export const termClause = (t) => (/[ -]/.test(t) ? `"${t}"` : t);
 
