@@ -179,6 +179,45 @@ eq('empty state', L.encodeState([]), '');
   ok('mapLimit rejects when a call fails', threw);
 }
 
+// --- the live tail: the open period runs to today, not to the last build -------------
+{
+  const last = L.BINS.at(-1);
+  eq('no tail on or before WEB_LAST', [L.tailPlan(L.BINS, L.WEB_LAST), L.tailPlan(L.BINS, '2026-01-01')], [null, null]);
+  for (const bad of [null, undefined, '', 'today', '2026-11-1', 20261112]) eq(`no tail for a bad date ${JSON.stringify(bad)}`, L.tailPlan(L.BINS, bad), null);
+  const p = L.tailPlan(L.BINS, '2026-11-12');
+  eq('tail moves the last bin to today', [p.bin.start, p.bin.end, p.bin.y0, p.bin.y1, p.bin.src], [last.start, '2026-11-12', 2025, 2026, 'web']);
+  eq('tail asks only the open year', p.years.map((y) => [y.y0, y.start, y.end]), [[2026, '2026-01-01', '2026-11-12']]);
+  eq('tail does not touch BINS', L.BINS.at(-1).end, L.WEB_LAST);
+  const q = L.tailPlan(L.BINS, '2027-03-04');
+  eq('a new year inside the bin: both open years asked', q.years.map((y) => [y.y0, y.end]), [[2026, '2026-12-31'], [2027, '2027-03-04']]);
+  eq('label follows the new year', L.binLabel(q.bin), '2025–27');
+  eq('2031 clamps to the bin span (a new bin needs a build)', [L.tailPlan(L.BINS, '2031-02-01').bin.end, L.tailPlan(L.BINS, '2031-02-01').bin.y1], ['2029-12-31', 2029]);
+  eq('no tail if the last bin is scanned', L.tailPlan(L.BINS.slice(0, 25), '2026-11-12'), null);
+  // apply: synthetic totals so the arithmetic is checked, not just echoed
+  const yt = Array.from({ length: 135 }, (_, i) => 100 + i);   // 2025 -> 233, 2026 -> 234
+  const tot = L.BINS.map((_, i) => 1000 + i);
+  const a = L.applyTail(L.BINS, tot, yt, p, [300]);
+  eq('the new year total replaces the baked one', a.yearTotals[2026 - L.YEAR0], 300);
+  eq('the bin total is its years summed', a.totals.at(-1), 233 + 300);
+  eq('other bins keep their totals', a.totals.slice(0, -1), tot.slice(0, -1));
+  eq('the bins end today', a.bins.at(-1).end, '2026-11-12');
+  eq('inputs are not mutated', [yt[2026 - L.YEAR0], tot.at(-1), L.BINS.at(-1).end], [234, 1027, L.WEB_LAST]);
+  const b = L.applyTail(L.BINS, tot, yt, q, [300, 50]);
+  eq('a new year grows the per-year table', [b.yearTotals.length, b.yearTotals[2027 - L.YEAR0], b.totals.at(-1)], [136, 50, 233 + 300 + 50]);
+  eq('every year of the new bin has a total', L.yearBins(b.bins.at(-1)).every((y) => b.yearTotals[y.y0 - L.YEAR0] > 0), true);
+  eq('fewer posts than the baked count is a bad answer', L.applyTail(L.BINS, tot, yt, p, [200]), null);
+  eq('a few deleted posts are not', L.applyTail(L.BINS, tot, yt, p, [230]) != null, true);
+  for (const bad of [[0], [-3], [NaN], [1.5], [], [300, 300], null, ['300']]) eq(`a bad live total ${JSON.stringify(bad)} keeps the baked run`, L.applyTail(L.BINS, tot, yt, p, bad), null);
+  eq('no plan keeps the baked run', L.applyTail(L.BINS, tot, yt, null, [300]), null);
+  // the identity the build holds must survive the splice, on the real shipped totals
+  {
+    const D0 = JSON.parse(readFileSync(fileURLToPath(new URL('data/presets.json', import.meta.url)), 'utf8'));
+    const r = L.applyTail(L.BINS, D0.totals, D0.yearTotals, q, [D0.yearTotals.at(-1) + 90, 40]);
+    eq('extended per-year totals still add up to each bin', r.bins.map((bn) => L.yearBins(bn).reduce((s, y) => s + r.yearTotals[y.y0 - L.YEAR0], 0)), r.totals);
+  }
+  eq('day label', [L.dayLabel('2026-11-12'), L.dayLabel('2027-01-01')], ['Nov 12, 2026', 'Jan 1, 2027']);
+}
+
 // --- the shipped data ---------------------------------------------------------------
 const here = fileURLToPath(new URL('.', import.meta.url));
 const D = JSON.parse(readFileSync(here + 'data/presets.json', 'utf8'));

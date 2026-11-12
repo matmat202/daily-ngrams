@@ -54,6 +54,45 @@ export function yearBins(bin) {
 export const yearRates = (counts, bin, yearTotals, webScale = 1) =>
   scaled(rates(counts, yearBins(bin).map((b) => yearTotals[b.y0 - YEAR0])), yearBins(bin), webScale);
 
+/* The live tail. The baked web totals stop at WEB_LAST, so on their own the page could
+ * never show a post newer than its last build, and "to today" grew falser every day. The
+ * page asks stanforddaily.com for each open year's total to today (one request now) and
+ * moves the last bin's end there; every word's last count is then asked to the same day,
+ * so numerator and denominator stop together. Null when there is nothing to move. A new
+ * five-year bin (2030) changes the chart's shape and needs a build, so the end is clamped
+ * to the last bin's span. `today` is the site's own date (America/Los_Angeles). */
+export function tailPlan(bins, today) {
+  const last = bins.at(-1);
+  if (!last || !isWeb(last) || !/^\d{4}-\d{2}-\d{2}$/.test(String(today ?? ''))) return null;
+  const span = `${last.y0 - (last.y0 % 5) + 4}-12-31`;
+  const end = today > span ? span : today;
+  if (end <= last.end) return null;
+  const bin = { ...last, y1: +end.slice(0, 4), end };
+  return { bin, years: yearBins(bin).filter((y) => y.y0 >= +last.end.slice(0, 4)) };
+}
+
+/* The plan plus the live year totals -> { bins, totals, yearTotals }, new arrays, or null
+ * to keep the baked run. The bin's total is the sum of its years, the same identity the
+ * build holds, so it cannot disagree with the per-year drill-down. A live year that holds
+ * fewer posts than the baked, shorter count of it is a bad answer, not a deletion spree. */
+export function applyTail(bins, totals, yearTotals, plan, yearCounts) {
+  if (!plan || !Array.isArray(yearCounts) || yearCounts.length !== plan.years.length) return null;
+  if (!yearCounts.every((n) => Number.isInteger(n) && n > 0)) return null;
+  const yt = yearTotals.slice();
+  for (const [k, y] of plan.years.entries()) {
+    const baked = yt[y.y0 - YEAR0];
+    if (baked > 0 && yearCounts[k] < baked * 0.95) return null;
+    yt[y.y0 - YEAR0] = yearCounts[k];
+  }
+  const t = totals.slice();
+  t[t.length - 1] = yearBins(plan.bin).reduce((a, y) => a + yt[y.y0 - YEAR0], 0);
+  return { bins: [...bins.slice(0, -1), plan.bin], totals: t, yearTotals: yt };
+}
+
+// "2026-11-12" -> "Nov 12, 2026": how far the open period runs, for the tooltip.
+export const dayLabel = (d) => new Date(d + 'T12:00:00Z')
+  .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+
 export const binLabel = (b) => `${b.y0}–${String(b.y1).slice(2)}`;
 
 /* A term the search index can take literally. Lucene has a dozen operators; rather than

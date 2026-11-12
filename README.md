@@ -39,7 +39,10 @@ that period. The y-axis is articles per 10,000, so a period when the paper print
 as much does not look twice as interested.
 
 The counts are live: the page queries the archive's public search from your browser,
-25 small requests per word, at most five at a time. The examples are also baked into
+25 small requests per word, at most five at a time. The per-period totals are baked at build time, so
+the open period (2025 on) would otherwise stop on the build day; instead the page asks
+stanforddaily.com for this year's post count on load and runs that period to today, and its
+tooltip says the date it runs to. If that one request fails, the chart keeps the build day. The examples are also baked into
 `data/presets.json`, so the page draws something at once and still works if that search
 is down.
 
