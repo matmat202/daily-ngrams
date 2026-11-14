@@ -1,5 +1,5 @@
 import {
-  parseTerms, parseTable, lookup, rates, change, fmtChange, searchUrl, peak, niceTicks, fmtRate,
+  parseTerms, parseTable, lookup, rates, change, fmtChange, searchUrl, peak, niceTicks, fmtRate, yearLabels,
   encodeState, decodeState, decodeGroup, menu,
 } from './course-logic.js';
 
@@ -77,12 +77,9 @@ function draw() {
     ax.append(el('line', { x1: M.l, x2: W - M.r, y1: y(t), y2: y(t), class: t === 0 ? 'base' : '' }));
     ax.append(el('text', { x: M.l - 6, y: y(t) + 4, 'text-anchor': 'end' }, fmtRate(t)));
   }
-  YEARS.forEach((label, i) => {
-    const y0 = Number(label.slice(0, 4));
-    if (y0 % (narrow ? 5 : 2) !== 0 && i !== YEARS.length - 1) return;
-    if (i === YEARS.length - 2 && y0 % (narrow ? 5 : 2) !== 0) return;
-    ax.append(el('text', { x: x(i), y: H - 8, 'text-anchor': 'middle' }, narrow ? String(y0) : label));
-  });
+  for (const i of yearLabels(YEARS, narrow ? 5 : 2, narrow ? 3 : 2)) {
+    ax.append(el('text', { x: x(i), y: H - 8, 'text-anchor': 'middle' }, narrow ? YEARS[i].slice(0, 4) : YEARS[i]));
+  }
   svg.append(ax);
 
   const labels = [];

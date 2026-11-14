@@ -211,5 +211,21 @@ if (existsSync(dir + 'terms.tsv')) {
   fail++;
 }
 
+// x-axis year labels never collide: the latest year is always labelled, and no other
+// label sits within `gap` years of it. Live 2026-11-13 the 390px chart drew 2025 and 2026
+// together as "202026"; checked over the shipped years and every later year count.
+{
+  const span = (n) => Array.from({ length: n }, (_, i) => `${2009 + i}-${String(10 + i).slice(-2)}`);
+  const yl = L.yearLabels(span(18), 5, 3).map((i) => span(18)[i].slice(0, 4));
+  ok('narrow labels for 2009-10..2026-27', JSON.stringify(yl) === '["2010","2015","2020","2026"]', JSON.stringify(yl));
+  let clean = true, bad = '';
+  for (let n = 3; n <= 30; n++) for (const [step, gap] of [[5, 3], [2, 2]]) {
+    const ix = L.yearLabels(span(n), step, gap);
+    const last = n - 1;
+    if (ix.at(-1) !== last || ix.slice(0, -1).some((i) => last - i < gap)) { clean = false; bad = `${n} years, step ${step}`; }
+  }
+  ok('the latest year is labelled and nothing crowds it', clean, bad);
+}
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

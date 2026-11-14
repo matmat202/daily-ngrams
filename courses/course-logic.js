@@ -99,6 +99,20 @@ export function searchUrl(term, label, dept = '') {
 
 // URL state: ?q=climate,machine+learning&g=CS. Read with parseTerms so a hand-edited URL is
 // cleaned the same way the input box is.
+/* Which year labels the x axis gets: every `step`-th autumn (2010, 2015, ...) and always
+ * the latest year, so the newest bulletin is named. A round year closer than `gap` years
+ * to the latest is dropped, or the two labels print over each other: at 390px, 2025 and
+ * 2026 read "202026" (seen live 2026-11-13). Returns indices into `years`. */
+export function yearLabels(years, step, gap) {
+  const last = years.length - 1;
+  const out = [];
+  years.forEach((label, i) => {
+    if (i === last) { out.push(i); return; }
+    if (Number(String(label).slice(0, 4)) % step === 0 && last - i >= gap) out.push(i);
+  });
+  return out;
+}
+
 export function encodeState(terms, group = '') {
   const p = new URLSearchParams();
   if (terms.length) p.set('q', terms.join(','));
