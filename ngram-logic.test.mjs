@@ -274,5 +274,29 @@ ok('no preset word that the index stems into another word', !D.presets.some((p) 
   ok('pandemic 2020-24 is 10x its 2015-19 rate', r[i2020] > 10 * r[i2020 - 1]);
 }
 
+// --- end-of-line labels ------------------------------------------------------------
+// A stand-in font: 7px a character, about 600 12px system-ui. "sustainability" is a courses
+// preset that the old 13-character cap cut to "sustainabili…" on the default view.
+{
+  const m7 = (t) => 7 * [...t].length;
+  const desk = L.fitLabels(['climate', 'sustainability', 'energy'], m7, { max: 150 });
+  eq('a 14-letter preset is shown whole', desk.texts, ['climate', 'sustainability', 'energy']);
+  eq('the margin fits the widest label plus pad and gap', desk.margin, 98 + 12);
+  ok('every shown label fits inside the margin', desk.texts.every((t) => m7(t) + 12 <= desk.margin));
+  eq('short labels get a short margin', L.fitLabels(['war'], m7).margin, 33);
+  eq('no labels: the minimum margin', L.fitLabels([], m7).margin, 24);
+  const phone = L.fitLabels(['entrepreneurship', 'ai'], m7, { max: 100 });
+  ok('a label too wide for a phone is shortened with "…"', phone.texts[0].endsWith('…') && phone.texts[0].length < 16, phone.texts[0]);
+  ok('the shortened label fits', m7(phone.texts[0]) + 12 <= phone.margin && phone.margin <= 100, JSON.stringify(phone));
+  eq('it keeps as many characters as fit', phone.texts[0], 'entrepreneu…');
+  eq('a short label next to it is untouched', phone.texts[1], 'ai');
+  eq('no dangling space before "…"', L.fitLabels(['big game tonight'], m7, { max: 75 }).texts[0], 'big game…');
+  // Every preset term on the three pages, at a desktop margin, is drawn whole.
+  const here = fileURLToPath(new URL('.', import.meta.url));
+  const daily = JSON.parse(readFileSync(here + 'data/presets.json', 'utf8')).presets.flatMap((p) => p.terms ?? L.parseTerms(p.q ?? ''));
+  ok('the Daily presets were read', daily.length >= 10, daily.length);
+  ok('no Daily preset is shortened on a desktop', L.fitLabels(daily, m7, { max: 150 }).texts.every((t) => !t.endsWith('…')));
+}
+
 console.log(`${fail ? 'FAILED' : 'ok'}: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

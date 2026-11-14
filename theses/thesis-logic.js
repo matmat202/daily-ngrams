@@ -2,7 +2,7 @@
  * No DOM here, so node can test every function the page depends on
  * (thesis-logic.test.mjs). The chart helpers shared with the Daily page (ticks, rate
  * formatting, peak) are imported from ../ngram-logic.js rather than copied. */
-export { niceTicks, fmtRate, peak } from '../ngram-logic.js';
+export { niceTicks, fmtRate, peak, fitLabels } from '../ngram-logic.js';
 
 export const MAX_TERMS = 4;
 export const PER = 1000; // rates are "titles per 1,000"

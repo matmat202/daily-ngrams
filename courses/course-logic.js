@@ -5,7 +5,7 @@
  * The page never sees course text. projects/course-ngrams/build.py counts, per academic
  * year, the courses using each word and two-word phrase, and ships that table; a term is
  * looked up, so the key built here must be the key build.py wrote. */
-export { niceTicks, fmtRate, peak } from '../ngram-logic.js';
+export { niceTicks, fmtRate, peak, fitLabels } from '../ngram-logic.js';
 
 export const MAX_TERMS = 4;
 export const MAX_WORDS = 2;

@@ -1,7 +1,7 @@
 import {
   BINS, binLabel, parseTerms, countUrl, archiveUrl, rates, peak, niceTicks,
   fmtRate, encodeState, decodeState, mapLimit, yearBins, yearRates,
-  isWeb, scaled, webCounts, tailPlan, applyTail, dayLabel, droppedTerms,
+  isWeb, scaled, webCounts, tailPlan, applyTail, dayLabel, droppedTerms, fitLabels,
 } from './ngram-logic.js';
 
 const $ = (id) => document.getElementById(id);
@@ -11,6 +11,13 @@ const COLORS = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)'];
 // 11px on a phone instead of being scaled down with a fixed viewBox.
 let W = 720, H = 320;
 const M = { l: 44, r: 96, t: 12, b: 28 };
+// A label's width in its own font (.lab is 600 12px in the page's UI face), for fitLabels.
+let ctx2d;
+const measureLabel = (t) => {
+  ctx2d ??= document.createElement('canvas').getContext('2d');
+  ctx2d.font = `600 12px ${getComputedStyle(document.body).fontFamily}`;
+  return ctx2d.measureText(t).width;
+};
 
 let DATA = null;           // site/data/presets.json
 // The run being drawn. Starts as the baked one; extendTail() moves its last bin to today.
@@ -190,7 +197,10 @@ function draw() {
   W = Math.max(300, Math.min(900, box.clientWidth || 720));
   const narrow = W < 520;
   H = narrow ? 250 : 320;
-  M.r = narrow ? 74 : 96;
+  // The right margin fits the end-of-line labels; on a phone it takes a third of the chart at most.
+  const labelled = current.filter((s) => s.rates[s.rates.length - 1] != null);
+  const fit = fitLabels(labelled.map((s) => s.term), measureLabel, { max: narrow ? Math.round(W / 3) : 150 });
+  M.r = fit.margin;
   const iw = W - M.l - M.r, ih = H - M.t - M.b;
   const max = Math.max(0, ...current.flatMap((s) => s.rates.filter((r) => r != null)));
   const ticks = niceTicks(max);
@@ -256,7 +266,7 @@ function draw() {
   const over = labels.length ? labels[labels.length - 1].y - (H - M.b) : 0;
   if (over > 0) for (const l of labels) l.y -= over;
   for (const l of labels) {
-    svg.append(el('text', { x: W - M.r + 8, y: l.y + 4, class: 'lab' }, l.s.term.length > 13 ? l.s.term.slice(0, 12) + '…' : l.s.term));
+    svg.append(el('text', { x: W - M.r + 8, y: l.y + 4, class: 'lab' }, fit.texts[labelled.indexOf(l.s)]));
   }
 
   const cross = el('line', { class: 'cross', y1: M.t, y2: M.t + ih, x1: -10, x2: -10, visibility: 'hidden' });

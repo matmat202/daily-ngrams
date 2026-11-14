@@ -242,3 +242,20 @@ export async function mapLimit(items, limit, fn) {
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
   return out;
 }
+
+/* End-of-line labels sit in the chart's right margin. A fixed margin with a 13-character cap
+ * cut "sustainability" (a courses preset) to "sustainabili…", and on a phone the 74px margin
+ * clipped even that past the edge. The margin now grows to the widest label as the page's
+ * own font measures it, up to `max`; only a label wider than that is shortened, by whole
+ * characters, until it and its "…" fit. `measure(text)` returns CSS px. */
+export function fitLabels(terms, measure, { min = 24, max = 120, pad = 8, gap = 4 } = {}) {
+  const room = max - pad - gap;
+  const texts = terms.map((t) => {
+    if (measure(t) <= room) return t;
+    let n = t.length - 1;
+    while (n > 1 && measure(t.slice(0, n).trimEnd() + '…') > room) n--;
+    return t.slice(0, n).trimEnd() + '…';
+  });
+  const widest = Math.max(0, ...texts.map(measure));
+  return { margin: Math.max(min, Math.min(max, Math.ceil(widest) + pad + gap)), texts };
+}
