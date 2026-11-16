@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The paper wrote “women” long before it wrote “she” · Stanford Daily Ngrams, a story</title>
+<meta name="description" content="A story from Stanford Daily Ngrams: from 1920 to 1969 the Stanford Daily's articles said “women” 74% as often as “men”, but only one said “she” for every 7 that said “he”. Only the war moved it. After 1970 it climbed for forty years, to 60% of “he” by 2014.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="plot" aria-hidden="true"></div>
+<p id="err" role="alert"></p>
+<main>
+
+<section class="step" data-step="groups"><div>
+  <p class="kicker">Stanford Daily Ngrams · a story</p>
+  <h1>The paper wrote “women” long before it wrote “she”</h1>
+  <p><a href="../">Stanford Daily Ngrams</a> counts how many of the paper’s articles use a
+  word. Set two words against each other, year by year, and the ratio says who the paper was
+  writing about: <b data-fact="n_articles"></b> scanned articles, <b data-fact="first"></b>
+  to <b data-fact="last"></b>.</p>
+  <p>Women as a group were in the paper early. In the median year from 1920 to 1969, the
+  articles saying “women” ran at <b data-fact="wm_before"></b> of those saying “men”: the
+  grey line, against the dark rule at parity.</p>
+  <p class="small">Scroll ↓</p>
+</div></section>
+
+<section class="step" data-step="she"><div>
+  <p class="kicker">Chapter 1 · Not one woman</p>
+  <h2>“She” stayed at one in seven</h2>
+  <p>The red line is “she” against “he”: a woman as the subject of a sentence. Before 1970 the
+  median year had <b data-fact="sh_before"></b> that said “he”.</p>
+  <p>And it barely moved. Outside the war, every year from 1920 to 1969 sat between
+  <b data-fact="sh_band_lo"></b> and <b data-fact="sh_band_hi"></b>, while the paper itself
+  swung from <b data-fact="tot_lo"></b> to <b data-fact="tot_hi"></b> articles a year. The
+  flat line is not the size of the paper changing under it.</p>
+</div></section>
+
+<section class="step" data-step="war"><div>
+  <p class="kicker">Chapter 2 · The war years</p>
+  <h2>Only the war moved it</h2>
+  <p>In <b data-fact="war_peak_year"></b>, with the men gone, “she” reached
+  <b data-fact="war_peak"></b> of “he”, and “women” outnumbered “men”: in
+  <b data-fact="wm_parity_before"></b>, the only years before 1970 that it did.</p>
+  <p>In 1946 the men came back and both lines fell back with them. The highest year outside
+  1942–1946 was <b data-fact="peace_max_year"></b>, at <b data-fact="peace_max"></b>: the
+  other war.</p>
+</div></section>
+
+<section class="step" data-step="turn"><div>
+  <p class="kicker">Chapter 3 · After 1970</p>
+  <h2>Then it climbed for forty years</h2>
+  <p>From 1971 on, “she” never fell below <b data-fact="after_min"></b> of “he”, more than any
+  year before 1970 outside the war. It passed its wartime peak in
+  <b data-fact="past_war"></b> and kept going: <b data-fact="sh_end"></b> in the archive’s last
+  five years, <b data-fact="fold"></b> its old level. “Her” against “his”, the dark line, draws
+  the same climb: <b data-fact="hh_before"></b> before 1970, <b data-fact="hh_end"></b> at the
+  end.</p>
+  <p>“Women” reached parity first, in <b data-fact="wm_first_par"></b>, and has stayed between
+  <b data-fact="wm_after_lo"></b> and <b data-fact="wm_after_hi"></b> of “men” since. The word
+  for women as a group was level by the early 1970s; the word for one woman was still
+  climbing when the scans stop.</p>
+</div></section>
+
+<section class="step" data-step="she"><div>
+  <p class="kicker">Epilogue · Reading the counts</p>
+  <h2>Count one yourself</h2>
+  <p>On <a href="../">Stanford Daily Ngrams</a>, chart any word, or two against each other,
+  and tap a period to read those articles in the archive.</p>
+  <p class="small">Data: the Stanford Daily archive’s own search, the count the page uses,
+  for every print year, fetched <b data-fact="fetched"></b>. A count is articles that use the
+  word at least once, so an article saying “he” forty times counts once. Old issues are OCR
+  scans, so early counts are low for every word. The singulars never get there: “woman”
+  peaked at <b data-fact="wo_max"></b> of “man”, in <b data-fact="wo_max_year"></b>, partly
+  because “man” has other senses. The web years after 2014 are left out: that search counts
+  differently, and a ratio across the change would measure the change. This counts words,
+  not why they changed. The program is
+  <a href="https://github.com/matmat202/daily-ngrams/blob/main/story/build_story.py">in the repository</a>.</p>
+</div></section>
+
+</main>
+<script type="module" src="story.js"></script>
+</body>
+</html>

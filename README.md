@@ -9,6 +9,14 @@ archive, about 695,000 of them; from 2015 it is the paper's web site, stanfordda
 Try `indians, cardinal` (the mascot changed in 1972 and the paper took a decade to follow),
 `computer, internet, email`, `war, draft, protest`, or `pandemic, zoom` (2020).
 
+## A story: “women” before “she”
+
+[story/](https://matmat202.github.io/daily-ngrams/story/) sets word pairs against each other
+for every print year, 1892–2014. From 1920 to 1969 the articles saying “women” ran at 74% of
+those saying “men”, but only one said “she” for every 7 that said “he”, and only the war moved
+it; after 1970 it climbed to 60% by 2014. The counts are frozen by `fetch_story.py` (the
+page's own query, one year at a time) and turned into the story by `story/build_story.py`.
+
 ## Thesis titles too
 
 **<https://matmat202.github.io/daily-ngrams/theses/>** does the same for the titles of
