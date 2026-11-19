@@ -48,6 +48,12 @@ eq('web years divided by webScale', ds.at(-1).r, (12 / totals.at(-1)) * 10000 / 
 eq('daily peak picks the bin', L.peakPoint(ds).label, '1965–69');
 const dsNull = L.dailySeries(db.map((b) => (b.src === 'web' ? null : 3)), totals, 1.2);
 eq('a web null stays null', dsNull.at(-1).r, null);
+// "the": the index matches every article, so each scanned count IS its bin's total (by
+// BINS index, not position: db starts at 1910, so position would read the wrong totals).
+const theCounts = db.map((b) => (b.src === 'web' ? 0 : totals[b.i]));
+eq('a word at every bin total is ignored', L.dailyIgnored(theCounts, totals), true);
+eq('and has no Daily line, not a flat 100%', L.dailySeries(theCounts, totals, 1.2), null);
+eq('a real word is not ignored', L.dailyIgnored(counts, totals), false);
 eq('peak ties go to the earliest', L.peakPoint([{ x: 1, r: 2 }, { x: 2, r: 2 }]).x, 1);
 eq('no peak when never used', L.peakPoint([{ x: 1, r: 0 }, { x: 2, r: null }]), null);
 eq('no peak for no series', L.peakPoint(null), null);

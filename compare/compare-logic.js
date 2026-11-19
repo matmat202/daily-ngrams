@@ -46,10 +46,18 @@ export function relative(rs) {
 /* The Daily's bins from FROM on, with their index into the full BINS (for totals). */
 export const dailyBins = () => D.BINS.map((b, i) => ({ ...b, i })).filter((b) => b.y1 >= FROM);
 
+/* True for a word the Daily's index does not keep (the, not, ...): it matches every article,
+ * so the Daily has no line for it. See ignoredByIndex in ngram-logic.js. */
+export const dailyIgnored = (counts, totalsAll) => {
+  const bs = dailyBins();
+  return D.ignoredByIndex(counts, bs.map((b) => totalsAll[b.i]), bs);
+};
+
 /* Daily counts (one per dailyBins() bin, null where the web cannot count a phrase) ->
  * [{x, r}] rates per 10,000, web years scaled to the scans as the Daily page does. */
 export function dailySeries(counts, totalsAll, webScale) {
   const bs = dailyBins();
+  if (dailyIgnored(counts, totalsAll)) return null;
   const rs = D.scaled(D.rates(counts, bs.map((b) => totalsAll[b.i])), bs, webScale);
   return bs.map((b, k) => ({ x: binX(b), r: rs[k], label: D.binLabel(b), n: counts[k], of: totalsAll[b.i] }));
 }

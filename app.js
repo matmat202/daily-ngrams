@@ -2,6 +2,7 @@ import {
   BINS, binLabel, parseTerms, countUrl, archiveUrl, rates, peak, niceTicks,
   fmtRate, encodeState, decodeState, mapLimit, yearBins, yearRates,
   isWeb, scaled, webCounts, tailPlan, applyTail, dayLabel, droppedTerms, fitLabels,
+  ignoredByIndex,
 } from './ngram-logic.js';
 
 const $ = (id) => document.getElementById(id);
@@ -176,16 +177,22 @@ async function show(terms, { push = true, quiet = false, dropped = [] } = {}) {
     catch (e) { failed.push(`“${t}” (${e.message})`); }
   }));
   if (id !== runId) return; // a newer search started while this one was in flight
-  current = out.map((s, i) => s && { ...s, slot: i, rates: scaled(rates(s.counts, totals), bins, DATA.webScale) }).filter(Boolean);
+  // A word the index does not keep reads as every article until 2014 and none after; not drawn.
+  const ignored = out.filter((s) => s && ignoredByIndex(s.counts, totals, bins)).map((s) => `“${s.term}”`);
+  current = out.map((s, i) => s && !ignoredByIndex(s.counts, totals, bins) &&
+    { ...s, slot: i, rates: scaled(rates(s.counts, totals), bins, DATA.webScale) }).filter(Boolean);
   draw();
   if (failed.length) {
     setStatus(`Couldn't reach the archive's search for ${failed.join(', ')}. The examples above still work.`, true);
   } else {
     const none = current.filter((s) => s.counts.every((c) => !c)).map((s) => `“${s.term}”`);
     const phrases = current.filter((s) => !webCounts(s.term)).map((s) => `“${s.term}”`);
-    setStatus(none.length ? `${none.join(', ')}: not found in any article.`
-      : phrases.length ? `${phrases.join(', ')}: phrases stop at 2014. The web site's search can't match a phrase, only its words.`
-      : dropped.length ? `Four words at a time: left out ${dropped.map((t) => `“${t}”`).join(', ')}.` : '');
+    const notes = [];
+    if (ignored.length) notes.push(`${ignored.join(', ')}: too common to count. The archive's search skips such words and matches every article, so ${ignored.length > 1 ? 'they are' : 'it is'} not drawn.`);
+    if (none.length) notes.push(`${none.join(', ')}: not found in any article.`);
+    else if (phrases.length) notes.push(`${phrases.join(', ')}: phrases stop at 2014. The web site's search can't match a phrase, only its words.`);
+    if (dropped.length) notes.push(`Four words at a time: left out ${dropped.map((t) => `“${t}”`).join(', ')}.`);
+    setStatus(notes.join(' '));
   }
 }
 

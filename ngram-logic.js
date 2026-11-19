@@ -189,6 +189,22 @@ export function rates(counts, totals) {
   });
 }
 
+/* A word the archive's index does not keep (the, not, will, it, ...) matches EVERY article:
+ * its count is the bin's exact total in all 25 scanned bins, while "stanford", the commonest
+ * real word tried, never passes 72% (measured 2026-11-19). The web search drops the same
+ * words the other way, to ~0 posts. Neither half is a count of the word, so such a word is
+ * not drawn. All scanned bins must agree, and at least 3 must be known, so a missing count
+ * or a tiny early bin cannot flag a real word. */
+export function ignoredByIndex(counts, totals, bins) {
+  let seen = 0;
+  for (let i = 0; i < bins.length; i++) {
+    if (isWeb(bins[i]) || !(totals[i] > 0) || counts?.[i] == null) continue;
+    if (counts[i] !== totals[i]) return false;
+    seen++;
+  }
+  return seen >= 3;
+}
+
 /* Web rates divided by webScale: the web posts run ~1.2x the scans' rate for the same
  * word in the years both cover (build.py measures it), so the line does not jump at 2015
  * for a reason that is only the change of source. */

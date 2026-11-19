@@ -2,7 +2,7 @@ import { countUrl, webCounts, isWeb, mapLimit, fmtRate } from '../ngram-logic.js
 import { parseRows } from '../theses/thesis-logic.js';
 import { parseTable } from '../courses/course-logic.js';
 import {
-  FROM, SOURCES, parseWord, dailyBins, dailySeries, thesisSeries, courseSeries, relative, peakPoint, peakGap,
+  FROM, SOURCES, parseWord, dailyBins, dailySeries, dailyIgnored, thesisSeries, courseSeries, relative, peakPoint, peakGap,
   encodeState, decodeState, sourceUrl, PRESETS,
 } from './compare-logic.js';
 
@@ -59,9 +59,12 @@ async function show(input, { push = true } = {}) {
   catch (e) { if (my === seq) setStatus(`The Daily’s archive did not answer (${e.message}); the other two are drawn.`, true); return; }
   if (my !== seq) return;
   current.series[0] = withRel(dailySeries(dc, DAILY.totals, DAILY.webScale));
+  current.ignored = dailyIgnored(dc, DAILY.totals);
   draw();
   const never = SOURCES.map((s, i) => (peakPoint(current.series[i]) ? null
-    : i === 2 && !co ? `${s.label}: too rare to chart` : `${s.label}: never`)).filter(Boolean);
+    : i === 2 && !co ? `${s.label}: too rare to chart`
+    : i === 0 && current.ignored ? `${s.label}: too common to count (its search skips such words)`
+    : `${s.label}: never`)).filter(Boolean);
   setStatus(never.join(' · '));
 }
 
@@ -109,7 +112,7 @@ function draw() {
       li.children[1].textContent = SOURCES[i].label;
       li.children[1].href = sourceUrl(SOURCES[i], current.term);
       const p = peakPoint(s);
-      li.children[2].textContent = i === 0 && !s ? '· counting…' : p ? `· peak ${p.label}` : i === 2 && !s ? '· too rare' : '· never';
+      li.children[2].textContent = i === 0 && current.ignored ? '· too common' : i === 0 && !s ? '· counting…' : p ? `· peak ${p.label}` : i === 2 && !s ? '· too rare' : '· never';
       legend.append(li);
       if (!s || !p) return;
       let d = '', pen = false;

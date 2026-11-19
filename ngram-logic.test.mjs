@@ -213,6 +213,23 @@ eq('empty state', L.encodeState([]), '');
   eq('fewer posts than the baked count is a bad answer', L.applyTail(L.BINS, tot, yt, p, [200]), null);
   eq('a few deleted posts are not', L.applyTail(L.BINS, tot, yt, p, [230]) != null, true);
   for (const bad of [[0], [-3], [NaN], [1.5], [], [300, 300], null, ['300']]) eq(`a bad live total ${JSON.stringify(bad)} keeps the baked run`, L.applyTail(L.BINS, tot, yt, p, bad), null);
+  // A year the build never counted has a baked total of 0, and then the 0.95 floor cannot
+  // fire -- the "every count is a positive integer" guard is the only thing left. The [0]
+  // case above does NOT pin that guard: with a baked 234 the floor rejects 0 as well, so a
+  // mutant of the guard stays green on it. These two use a baked 0, where only one guard can.
+  {
+    const zero = yt.slice(); zero[2026 - L.YEAR0] = 0;
+    eq('a live count of 0 is rejected even where the 95% floor cannot fire', L.applyTail(L.BINS, tot, zero, p, [0]), null);
+    eq('a live count of 1 is accepted there', L.applyTail(L.BINS, tot, zero, p, [1]).yearTotals[2026 - L.YEAR0], 1);
+  }
+  // the floor is "fewer than 95%", not "95% or fewer": at exactly 95% nothing was deleted.
+  // 20 * 0.95 is exactly 19 in IEEE doubles, so this lands on the boundary, not beside it.
+  {
+    const twenty = yt.slice(); twenty[2026 - L.YEAR0] = 20;
+    eq('20 * 0.95 is exactly 19, so this is the boundary', 20 * 0.95, 19);
+    eq('exactly 95% of the baked count is accepted', L.applyTail(L.BINS, tot, twenty, p, [19]).yearTotals[2026 - L.YEAR0], 19);
+    eq('a hair under 95% is not', L.applyTail(L.BINS, tot, twenty, p, [18]), null);
+  }
   eq('no plan keeps the baked run', L.applyTail(L.BINS, tot, yt, null, [300]), null);
   // the identity the build holds must survive the splice, on the real shipped totals
   {
@@ -291,11 +308,49 @@ ok('no preset word that the index stems into another word', !D.presets.some((p) 
   eq('it keeps as many characters as fit', phone.texts[0], 'entrepreneu…');
   eq('a short label next to it is untouched', phone.texts[1], 'ai');
   eq('no dangling space before "…"', L.fitLabels(['big game tonight'], m7, { max: 75 }).texts[0], 'big game…');
+  // The four edges of the shrink loop and the default cap. The stand-in font and the shipped
+  // presets never make a label exactly as wide as the room, and never shrink one to a single
+  // character, so none of these cases was reachable from m7.
+  const m10 = (t) => 10 * [...t].length;
+  const box = { min: 0, pad: 0, gap: 0 };
+  eq('a label exactly as wide as the room is kept whole', L.fitLabels(['a'], m10, { ...box, max: 10 }).texts, ['a']);
+  eq('one unit too wide, and a one-character label becomes just the ellipsis', L.fitLabels(['a'], m10, { ...box, max: 9 }).texts, ['…']);
+  eq('it drops exactly one character when that is enough', L.fitLabels(['ab'], m10, { ...box, max: 11 }).texts, ['a…']);
+  eq('it never shrinks a long label past one character', L.fitLabels(['sustainability'], m10, { ...box, max: 11 }).texts, ['s…']);
+  eq('the default max is 120', L.fitLabels(['sustainability'], (t) => 11 * [...t].filter((c) => c !== '…').length, box).margin, 110);
+  eq('no labels and no minimum: the margin is just pad and gap', L.fitLabels([], m10, { min: 0 }).margin, 12);
+
   // Every preset term on the three pages, at a desktop margin, is drawn whole.
   const here = fileURLToPath(new URL('.', import.meta.url));
   const daily = JSON.parse(readFileSync(here + 'data/presets.json', 'utf8')).presets.flatMap((p) => p.terms ?? L.parseTerms(p.q ?? ''));
   ok('the Daily presets were read', daily.length >= 10, daily.length);
   ok('no Daily preset is shortened on a desktop', L.fitLabels(daily, m7, { max: 150 }).texts.every((t) => !t.endsWith('…')));
+}
+
+// --- words the index does not keep ------------------------------------------------
+// The shapes are the measured ones (2026-11-19): "the" came back as each scanned bin's exact
+// total and 0 on the web; "stanford" ran 25-72% of the scans.
+{
+  const here = fileURLToPath(new URL('.', import.meta.url));
+  const D = JSON.parse(readFileSync(here + 'data/presets.json', 'utf8'));
+  const { bins, totals } = D;
+  const scan = bins.map((b) => !L.isWeb(b));
+  const the = totals.map((t, i) => (scan[i] ? t : 0));
+  ok('"the": every scanned bin is its total, so it is ignored', L.ignoredByIndex(the, totals, bins));
+  ok('the web half does not have to agree (it reads ~0)', L.ignoredByIndex(the.map((c, i) => (scan[i] ? c : 3)), totals, bins));
+  const one = the.slice(); one[0] -= 1;
+  ok('one scanned bin short of its total: a real word', !L.ignoredByIndex(one, totals, bins));
+  const last = the.slice(); last[bins.findIndex(L.isWeb) - 1] -= 1;
+  ok('the LAST scanned bin short of its total: a real word', !L.ignoredByIndex(last, totals, bins));
+  ok('"stanford" at 72% is kept', !L.ignoredByIndex(totals.map((t) => Math.round(t * 0.72)), totals, bins));
+  const gaps = the.map((c, i) => (i < 3 ? c : null));
+  ok('three known bins at their totals are enough', L.ignoredByIndex(gaps, totals, bins));
+  ok('two are not', !L.ignoredByIndex(gaps.map((c, i) => (i < 2 ? c : null)), totals, bins));
+  ok('nothing known: not ignored', !L.ignoredByIndex(totals.map(() => null), totals, bins));
+  ok('no counts at all: not ignored, and no throw', !L.ignoredByIndex(undefined, totals, bins));
+  ok('a never-said word (all zeros) is not ignored', !L.ignoredByIndex(totals.map(() => 0), totals, bins));
+  // The shipped presets were baked through the same search, so none of them can be flagged.
+  ok('no baked preset term is flagged', Object.values(D.counts).every((c) => !L.ignoredByIndex(c, totals, bins)));
 }
 
 console.log(`${fail ? 'FAILED' : 'ok'}: ${pass} passed, ${fail} failed`);
