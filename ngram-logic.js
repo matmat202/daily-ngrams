@@ -246,6 +246,9 @@ export function decodeState(search) {
   return q == null ? null : parseTerms(q);
 }
 
+// The words a shared ?q= link names past the four it can draw, so the page can say so.
+export const decodeDropped = (search) => droppedTerms(new URLSearchParams(search || '').get('q') ?? '');
+
 /* Run fn over items with at most `limit` in flight; results keep the input order. The
  * archive is a student paper's search box, not a CDN, so a word costs 25 requests and
  * this keeps them from all landing at once. */

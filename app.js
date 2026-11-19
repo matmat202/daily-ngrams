@@ -1,6 +1,6 @@
 import {
   BINS, binLabel, parseTerms, countUrl, archiveUrl, rates, peak, niceTicks,
-  fmtRate, encodeState, decodeState, mapLimit, yearBins, yearRates,
+  fmtRate, encodeState, decodeState, decodeDropped, mapLimit, yearBins, yearRates,
   isWeb, scaled, webCounts, tailPlan, applyTail, dayLabel, droppedTerms, fitLabels,
   ignoredByIndex,
 } from './ngram-logic.js';
@@ -28,6 +28,7 @@ const tailOf = new Map();  // term -> the last bin's end its counts were asked t
 const pending = new Map(); // term -> its fetch in flight (.end = the end it asks to), so a redraw does not ask twice
 const yearCache = new Map(); // `${term}|${bin index}|${bin end}` -> that bin's per-year counts[]
 let shown = [];            // the terms last asked for, redrawn when the tail moves
+let shownDropped = [];     // and the words that ask left out past four
 let current = [];          // [{term, counts, rates}]
 let runId = 0;
 let unpin = () => {}; // set by draw(); Escape closes a pinned tooltip
@@ -105,7 +106,7 @@ async function extendTail() {
   const t = applyTail(bins, totals, yearTotals, plan, got);
   if (!t) return;
   ({ bins, totals, yearTotals } = t);
-  await show(shown, { push: false, quiet: true });
+  await show(shown, { push: false, quiet: true, dropped: shownDropped });
 }
 
 // Only a clicked (pinned) period asks for its years, never a hover: up to 5 requests per
@@ -162,6 +163,7 @@ async function drawYears(box, i, isCurrent) {
 async function show(terms, { push = true, quiet = false, dropped = [] } = {}) {
   const id = ++runId;
   shown = terms;
+  shownDropped = dropped; // a re-draw for the live tail must keep saying what was left out
   $('q').value = terms.join(', ');
   for (const b of document.querySelectorAll('#presets button')) {
     b.setAttribute('aria-pressed', String(b.dataset.terms === terms.join(',')));
@@ -383,7 +385,7 @@ async function main() {
   let lastW = innerWidth;
   addEventListener('resize', () => { if (innerWidth !== lastW) { lastW = innerWidth; draw(); } });
   const fromUrl = decodeState(location.search);
-  await show(fromUrl && fromUrl.length ? fromUrl : DATA.presets[0].terms, { push: !!fromUrl });
+  await show(fromUrl && fromUrl.length ? fromUrl : DATA.presets[0].terms, { push: !!fromUrl, dropped: decodeDropped(location.search) });
   extendTail();
 }
 
