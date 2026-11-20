@@ -355,6 +355,16 @@ ok('no preset word that the index stems into another word', !D.presets.some((p) 
   ok('nothing known: not ignored', !L.ignoredByIndex(totals.map(() => null), totals, bins));
   ok('no counts at all: not ignored, and no throw', !L.ignoredByIndex(undefined, totals, bins));
   ok('a never-said word (all zeros) is not ignored', !L.ignoredByIndex(totals.map(() => 0), totals, bins));
+  // Two boundaries the audit had accepted as unreachable, added 2026-11-20 after the
+  // equivalence sweep was widened and showed both were killable, not equivalent.
+  // A bin with no articles at all must be SKIPPED, not read as a count agreeing with its
+  // total: with `>` relaxed to `>=`, all-zero totals start agreeing and the word is flagged.
+  ok('bins with zero totals are skipped, not counted as agreement',
+    !L.ignoredByIndex(bins.map(() => 0), bins.map(() => 0), bins));
+  // And a total of exactly 1 is a real scanned bin: with the 0 raised to 1 it is skipped,
+  // leaving fewer than three seen bins and losing the flag.
+  ok('a total of exactly one is still a scanned bin',
+    L.ignoredByIndex(bins.map(() => 1), bins.map(() => 1), bins));
   // The shipped presets were baked through the same search, so none of them can be flagged.
   ok('no baked preset term is flagged', Object.values(D.counts).every((c) => !L.ignoredByIndex(c, totals, bins)));
 }
