@@ -74,6 +74,9 @@ eq('non-latin letters kept', L.cleanTerm('Ñandú'), 'ñandú');
 eq('punctuation only is null', L.cleanTerm('*&^%'), null);
 eq('empty is null', L.cleanTerm(''), null);
 eq('null is null', L.cleanTerm(null), null);
+// ?? not ||: only null/undefined mean "nothing"; a 0 is the term "0" (bin/mutate survivor).
+eq('0 is the term "0"', L.cleanTerm(0), '0');
+eq('parseTerms(0) is ["0"]', L.parseTerms(0), ['0']);
 ok('long input capped', L.cleanTerm('a'.repeat(100)).length <= 40);
 eq('comma list parsed', L.parseTerms('computer, Internet ,big game'), ['computer', 'internet', 'big game']);
 eq('duplicates removed', L.parseTerms('war, War, WAR'), ['war']);
