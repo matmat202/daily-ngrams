@@ -2,7 +2,7 @@ import {
   BINS, binLabel, parseTerms, countUrl, archiveUrl, rates, peak, niceTicks,
   fmtRate, encodeState, decodeState, decodeDropped, mapLimit, yearBins, yearRates,
   isWeb, scaled, webCounts, tailPlan, applyTail, dayLabel, droppedTerms, fitLabels,
-  ignoredByIndex,
+  ignoredByIndex, plotted,
 } from './ngram-logic.js';
 
 const $ = (id) => document.getElementById(id);
@@ -289,6 +289,8 @@ function draw() {
     hit.append(r);
   });
   svg.append(hit);
+  // Nothing above zero: no axis to read, so no chart (the legend and status still say why).
+  if (!plotted(current)) { unpin = () => {}; drawTable(); return; }
   box.append(svg);
 
   const tip = document.createElement('div');

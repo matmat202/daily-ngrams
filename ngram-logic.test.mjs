@@ -368,6 +368,17 @@ ok('no preset word that the index stems into another word', !D.presets.some((p) 
   // The shipped presets were baked through the same search, so none of them can be flagged.
   ok('no baked preset term is flagged', Object.values(D.counts).every((c) => !L.ignoredByIndex(c, totals, bins)));
 }
+{
+  // plotted: draw the axis only when some line rises above zero
+  const z = { rates: [0, 0, null, 0] }, r = { rates: [0, null, 0.4, 0] };
+  ok('plotted: nothing asked is nothing drawn', !L.plotted([]));
+  ok('plotted: undefined is nothing, and no throw', !L.plotted(undefined));
+  ok('plotted: a never-said word alone is not drawn', !L.plotted([z]));
+  ok('plotted: all-null rates (a phrase with no counts) are not drawn', !L.plotted([{ rates: [null, null] }]));
+  ok('plotted: one real line beside a zero line is drawn', L.plotted([z, r]));
+  ok('plotted: the real line may come first', L.plotted([r, z]));
+  ok('plotted: a single positive bin at the very end counts', L.plotted([{ rates: [0, 0, 0, 1e-6] }]));
+}
 
 console.log(`${fail ? 'FAILED' : 'ok'}: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

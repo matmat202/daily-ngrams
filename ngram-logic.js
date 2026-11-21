@@ -217,6 +217,11 @@ export function peak(rs) {
   return best < 0 ? null : best;
 }
 
+/* Whether a chart has anything to draw: some series has a rate above zero. A never-said
+ * word, or only words the index ignores, would draw a bare 0-1.00 axis, so the page shows
+ * the legend and the message without one. */
+export const plotted = (series) => (series ?? []).some((s) => peak(s?.rates ?? []) != null);
+
 /* Axis ticks: 0 and round steps (1/2/5 x 10^n) to at least max, 3-6 ticks. */
 export function niceTicks(max) {
   if (!(max > 0)) return [0, 1];
