@@ -349,6 +349,8 @@ function draw() {
 
 function drawTable() {
   const t = $('table');
+  // No series at all (only ignored words, or none asked): the disclosure would open onto nothing.
+  $('tableBox').hidden = !current.length;
   if (!current.length) { t.replaceChildren(); return; }
   const tbl = document.createElement('table');
   const head = document.createElement('tr');
