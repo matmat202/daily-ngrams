@@ -2,7 +2,7 @@ import {
   BINS, binLabel, parseTerms, countUrl, archiveUrl, rates, peak, niceTicks,
   fmtRate, encodeState, decodeState, decodeDropped, mapLimit, yearBins, yearRates,
   isWeb, scaled, webCounts, tailPlan, applyTail, dayLabel, droppedTerms, fitLabels,
-  ignoredByIndex, plotted,
+  ignoredByIndex, plotted, relative, PEAK_TICKS, decodeScale,
 } from './ngram-logic.js';
 
 const $ = (id) => document.getElementById(id);
@@ -11,7 +11,7 @@ const COLORS = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)'];
 // Drawn at the container's own pixel width (1 SVG unit = 1 CSS px), so axis text stays
 // 11px on a phone instead of being scaled down with a fixed viewBox.
 let W = 720, H = 320;
-const M = { l: 44, r: 96, t: 12, b: 28 };
+const M = { l: 44, r: 96, t: 14, b: 28 };
 // A label's width in its own font (.lab is 600 12px in the page's UI face), for fitLabels.
 let ctx2d;
 const measureLabel = (t) => {
@@ -31,6 +31,7 @@ let shown = [];            // the terms last asked for, redrawn when the tail mo
 let shownDropped = [];     // and the words that ask left out past four
 let current = [];          // [{term, counts, rates}]
 let runId = 0;
+let scale = 'rate';       // 'rate' (per 10,000) or 'peak' (each line as % of its own peak)
 let unpin = () => {}; // set by draw(); Escape closes a pinned tooltip
 
 const el = (tag, attrs = {}, text) => {
@@ -168,7 +169,7 @@ async function show(terms, { push = true, quiet = false, dropped = [] } = {}) {
   for (const b of document.querySelectorAll('#presets button')) {
     b.setAttribute('aria-pressed', String(b.dataset.terms === terms.join(',')));
   }
-  if (push) history.replaceState(null, '', location.pathname + encodeState(terms));
+  if (push) history.replaceState(null, '', location.pathname + encodeState(terms, scale));
   if (!terms.length) { current = []; draw(); setStatus('Type a word to chart it.'); return; }
   const missing = terms.filter((t) => !cache.has(t));
   if (missing.length && !quiet) setStatus(`Asking the archive about ${missing.map((t) => `“${t}”`).join(', ')}…`);
@@ -207,24 +208,26 @@ function draw() {
   const narrow = W < 520;
   H = narrow ? 250 : 320;
   // The right margin fits the end-of-line labels; on a phone it takes a third of the chart at most.
-  const labelled = current.filter((s) => s.rates[s.rates.length - 1] != null);
+  const peakMode = scale === 'peak';
+  const vals = new Map(current.map((s) => [s, peakMode ? relative(s.rates) : s.rates]));
+  const labelled = current.filter((s) => vals.get(s)[s.rates.length - 1] != null);
   const fit = fitLabels(labelled.map((s) => s.term), measureLabel, { max: narrow ? Math.round(W / 3) : 150 });
   M.r = fit.margin;
   const iw = W - M.l - M.r, ih = H - M.t - M.b;
-  const max = Math.max(0, ...current.flatMap((s) => s.rates.filter((r) => r != null)));
-  const ticks = niceTicks(max);
+  const max = Math.max(0, ...current.flatMap((s) => vals.get(s).filter((r) => r != null)));
+  const ticks = peakMode ? PEAK_TICKS : niceTicks(max);
   const top = ticks[ticks.length - 1];
   const x = (i) => M.l + (iw * i) / (bins.length - 1);
   const y = (r) => M.t + ih - (ih * r) / top;
   const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img',
     'aria-label': current.length
-      ? `Line chart, articles per 10,000 mentioning ${current.map((s) => s.term).join(', ')}, ${bins[0].y0} to ${bins.at(-1).y1}`
+      ? `Line chart, ${peakMode ? "each word as a percent of its own peak in articles" : 'articles'} per 10,000 mentioning ${current.map((s) => s.term).join(', ')}, ${bins[0].y0} to ${bins.at(-1).y1}`
       : 'Empty chart' });
 
   const ax = el('g', { class: 'ax' });
   for (const t of ticks) {
     ax.append(el('line', { x1: M.l, x2: W - M.r, y1: y(t), y2: y(t), class: t === 0 ? 'base' : '' }));
-    ax.append(el('text', { x: M.l - 6, y: y(t) + 4, 'text-anchor': 'end' }, fmtRate(t)));
+    ax.append(el('text', { x: M.l - 6, y: y(t) + 4, 'text-anchor': 'end' }, peakMode ? `${t}%` : fmtRate(t)));
   }
   bins.forEach((b, i) => {
     if (b.y0 % (narrow ? 40 : 20) !== 0 && i !== 0) return;
@@ -235,7 +238,8 @@ function draw() {
   if (seam > 0) {
     const sx = (x(seam - 1) + x(seam)) / 2;
     ax.append(el('line', { x1: sx, x2: sx, y1: M.t, y2: M.t + ih, class: 'seam' }));
-    ax.append(el('text', { x: sx + 4, y: M.t + 10, 'text-anchor': 'start', class: 'seamlab' }, 'web'));
+    // Above the plot area: inside it, the label sat on the very spot every line peaks at 100%.
+    ax.append(el('text', { x: sx + 4, y: M.t - 2, 'text-anchor': 'start', class: 'seamlab' }, 'web'));
   }
   svg.append(ax);
 
@@ -246,8 +250,9 @@ function draw() {
     // change of source shows in the line itself and not only in a footnote.
     const path = (from, to) => {
       let d = '', pen = false;
+      const v = vals.get(s);
       for (let i = from; i <= to; i++) {
-        const r = s.rates[i];
+        const r = v[i];
         if (r == null) { pen = false; continue; }
         d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)},${y(r).toFixed(1)}`;
         pen = true;
@@ -260,7 +265,7 @@ function draw() {
     // Direct labels only for lines that reach the right edge: a phrase stops at 2014, and a
     // label out at 2026 would claim a value there. The legend still names it.
     const last = s.rates.length - 1;
-    if (s.rates[last] != null) labels.push({ s, y: y(s.rates[last]) });
+    if (vals.get(s)[last] != null) labels.push({ s, y: y(vals.get(s)[last]) });
     const p = peak(s.rates);
     const li = document.createElement('li');
     li.innerHTML = `<span class="sw" style="background:${c}"></span><span></span>` +
@@ -301,8 +306,8 @@ function draw() {
     if (i < 0 || !current.length) { cross.setAttribute('visibility', 'hidden'); dots.replaceChildren(); tip.classList.remove('on'); return; }
     cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i));
     cross.setAttribute('visibility', 'visible');
-    dots.replaceChildren(...current.filter((s) => s.rates[i] != null)
-      .map((s) => el('circle', { cx: x(i), cy: y(s.rates[i]), r: 4.5, class: 'dot', fill: COLORS[s.slot] })));
+    dots.replaceChildren(...current.filter((s) => vals.get(s)[i] != null)
+      .map((s) => el('circle', { cx: x(i), cy: y(vals.get(s)[i]), r: 4.5, class: 'dot', fill: COLORS[s.slot] })));
     const b = bins[i];
     const web = isWeb(b);
     const upTo = i === bins.length - 1 && web ? `, to ${dayLabel(b.end)}` : '';
@@ -315,7 +320,8 @@ function draw() {
       const tr = document.createElement('tr');
       tr.innerHTML = `<td><span class="sw" style="background:${COLORS[s.slot]}"></span></td><td class="v"></td>`;
       tr.children[0].append(s.term);
-      tr.children[1].textContent = s.counts[i] == null ? 'phrase: not counted' : `${fmtRate(s.rates[i])}  (${s.counts[i].toLocaleString('en-US')})`;
+      const pct = peakMode && vals.get(s)[i] != null ? ` · ${Math.round(vals.get(s)[i])}% of peak` : '';
+      tr.children[1].textContent = s.counts[i] == null ? 'phrase: not counted' : `${fmtRate(s.rates[i])}  (${s.counts[i].toLocaleString('en-US')})${pct}`;
       tb.append(tr);
       if (s.counts[i] > 0) {
         const a = document.createElement('a');
@@ -388,6 +394,21 @@ async function main() {
   $('form').addEventListener('submit', (e) => { e.preventDefault(); const v = $('q').value; show(parseTerms(v), { dropped: droppedTerms(v) }); });
   let lastW = innerWidth;
   addEventListener('resize', () => { if (innerWidth !== lastW) { lastW = innerWidth; draw(); } });
+  scale = decodeScale(location.search);
+  const setScale = (v) => {
+    scale = v;
+    for (const b of document.querySelectorAll('#scaleBtns button')) b.setAttribute('aria-pressed', String(b.dataset.scale === scale));
+    $('chartTitle').textContent = scale === 'peak'
+      ? 'Each word as a percent of its own peak, in articles per 10,000' : 'Articles mentioning each word, per 10,000 articles';
+  };
+  setScale(scale);
+  for (const b of document.querySelectorAll('#scaleBtns button')) {
+    b.addEventListener('click', () => {
+      setScale(b.dataset.scale);
+      history.replaceState(null, '', location.pathname + encodeState(shown, scale));
+      unpin(); draw();
+    });
+  }
   const fromUrl = decodeState(location.search);
   await show(fromUrl && fromUrl.length ? fromUrl : DATA.presets[0].terms, { push: !!fromUrl, dropped: decodeDropped(location.search) });
   extendTail();

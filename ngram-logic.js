@@ -222,6 +222,17 @@ export function peak(rs) {
  * the legend and the message without one. */
 export const plotted = (series) => (series ?? []).some((s) => peak(s?.rates ?? []) != null);
 
+/* The "each at its peak" scale: rates -> percent of the series' own highest value, so a
+ * word that peaks at 30 per 10,000 is not flattened against one that peaks at 1,800. Null
+ * stays null ("not counted"); a series with no positive value is all null, never a flat 0%,
+ * because a word never printed has no peak to be a share of. */
+export function relative(rs) {
+  const max = Math.max(0, ...rs.filter((r) => r != null));
+  if (!(max > 0)) return rs.map(() => null);
+  return rs.map((r) => (r == null ? null : (100 * r) / max));
+}
+export const PEAK_TICKS = [0, 25, 50, 75, 100];
+
 /* Axis ticks: 0 and round steps (1/2/5 x 10^n) to at least max, 3-6 ticks. */
 export function niceTicks(max) {
   if (!(max > 0)) return [0, 1];
@@ -245,7 +256,14 @@ export function fmtRate(r) {
 
 // URL state: ?q=computer,big+game. Read with parseTerms so a hand-edited URL is cleaned
 // the same way the input box is.
-export const encodeState = (terms) => (terms.length ? `?q=${terms.map(encodeURIComponent).join(',')}` : '');
+// &scale=peak rides along only when it is not the default, so old links stay what they were.
+export const encodeState = (terms, scale = 'rate') => {
+  const parts = [];
+  if (terms.length) parts.push(`q=${terms.map(encodeURIComponent).join(',')}`);
+  if (scale === 'peak') parts.push('scale=peak');
+  return parts.length ? `?${parts.join('&')}` : '';
+};
+export const decodeScale = (search) => (new URLSearchParams(search || '').get('scale') === 'peak' ? 'peak' : 'rate');
 export function decodeState(search) {
   const q = new URLSearchParams(search || '').get('q');
   return q == null ? null : parseTerms(q);

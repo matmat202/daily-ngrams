@@ -380,5 +380,28 @@ ok('no preset word that the index stems into another word', !D.presets.some((p) 
   ok('plotted: a single positive bin at the very end counts', L.plotted([{ rates: [0, 0, 0, 1e-6] }]));
 }
 
+// --- the "each at its peak" scale --------------------------------------------------------
+{
+  eq('relative: the peak is 100 and the rest scale with it', L.relative([0, 15, 30, 7.5]), [0, 50, 100, 25]);
+  eq('relative: the peak may be anywhere, not only the last bin', L.relative([40, 10, 20]), [100, 25, 50]);
+  eq('relative: null (a phrase after 2014) stays null', L.relative([10, 20, null]), [50, 100, null]);
+  eq('relative: a never-printed word has no peak, so no line', L.relative([0, 0, 0]), [null, null, null]);
+  eq('relative: all-null stays all-null', L.relative([null, null]), [null, null]);
+  // the point of the scale: covid at 1,813 and divest at 93 both reach 100
+  const big = L.relative([0, 1813, 232]), small = L.relative([93.2, 20, 0]);
+  eq('relative: two words of very different size share one top', [Math.max(...big), Math.max(...small)], [100, 100]);
+  eq('relative: does not modify its input', (() => { const a = [1, 2]; L.relative(a); return a; })(), [1, 2]);
+  eq('peak ticks run 0-100', L.PEAK_TICKS, [0, 25, 50, 75, 100]);
+  // URL: the default scale leaves old links byte-identical; peak rides along and round-trips
+  eq('state: rate scale adds nothing', L.encodeState(['axe'], 'rate'), '?q=axe');
+  eq('state: peak scale is encoded', L.encodeState(['big game', 'axe'], 'peak'), '?q=big%20game,axe&scale=peak');
+  eq('state: peak with no words still says so', L.encodeState([], 'peak'), '?scale=peak');
+  eq('scale decodes peak', L.decodeScale('?q=axe&scale=peak'), 'peak');
+  eq('scale defaults to rate', L.decodeScale('?q=axe'), 'rate');
+  eq('scale: an unknown value is the default', L.decodeScale('?scale=log'), 'rate');
+  eq('scale: empty search is the default', L.decodeScale(''), 'rate');
+  eq('scale: words still decode beside it', L.decodeState('?q=big%20game,axe&scale=peak'), ['big game', 'axe']);
+}
+
 console.log(`${fail ? 'FAILED' : 'ok'}: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
