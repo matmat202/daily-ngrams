@@ -38,6 +38,10 @@ form input:focus-visible,button:focus-visible,a:focus-visible,summary:focus-visi
 .presets button:hover{border-color:var(--accent);color:var(--ink)}
 .presets button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:600}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 10px 8px}
+.scale{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 4px 8px;font-size:12px;color:var(--ink-2)}
+.scale button{font:inherit;font-size:12px;padding:4px 9px;border:1px solid var(--line);border-radius:999px;
+  background:var(--card);color:var(--ink-2);cursor:pointer}
+.scale button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:600}
 .legend{display:flex;flex-wrap:wrap;gap:4px 14px;margin:0 4px 6px;padding:0;list-style:none;font-size:13px}
 .legend li{display:flex;align-items:center;gap:6px;color:var(--ink)}
 .legend .sw{width:14px;height:3px;border-radius:2px}
@@ -108,6 +112,9 @@ input,select,textarea{font-size:16px!important}
 
   <section class="card" aria-labelledby="chartTitle">
     <h2 id="chartTitle" style="position:absolute;left:-9999px">Thesis titles containing each word, per 1,000 titles</h2>
+    <div class="scale" id="scaleBtns" role="group" aria-label="Scale">Scale:
+      <button type="button" data-scale="rate" aria-pressed="true">Per 1,000</button>
+      <button type="button" data-scale="peak" aria-pressed="false">Each at its peak</button></div>
     <ul class="legend" id="legend"></ul>
     <p class="status" id="status" role="status" aria-live="polite">Loading the titles…</p>
     <div id="chart"></div>
@@ -115,6 +122,7 @@ input,select,textarea{font-size:16px!important}
       (<span id="count">about 62,000</span> in all, from SearchWorks). A word also counts its plural, so <em>network</em> finds
       <em>networks</em>; <em>neur*</em> finds any word starting <em>neur</em>; a phrase matches as typed. Only titles are
       searched, not abstracts. Early periods hold few theses, so a single title moves their line a lot: the tooltip gives the count. <span id="early"></span>
+      <strong>Each at its peak</strong> draws every word as a percent of its own highest period, so a rare word’s rise shows beside a common one’s.
       Hover or tap a period to read the titles.</p>
   </section>
 

@@ -2,7 +2,7 @@
  * No DOM here, so node can test every function the page depends on
  * (thesis-logic.test.mjs). The chart helpers shared with the Daily page (ticks, rate
  * formatting, peak) are imported from ../ngram-logic.js rather than copied. */
-export { niceTicks, fmtRate, peak, fitLabels } from '../ngram-logic.js';
+export { niceTicks, fmtRate, peak, fitLabels, relative, PEAK_TICKS } from '../ngram-logic.js';
 
 export const MAX_TERMS = 4;
 export const PER = 1000; // rates are "titles per 1,000"
@@ -144,13 +144,15 @@ export function examples(rows, bs, i, term, dept = -1, n = 5) {
   return out;
 }
 
-// URL state: ?q=neural,deep+learning&d=Department+of+Physics. Read with parseTerms so a
+// URL state: ?q=neural,deep+learning&d=Department+of+Physics&scale=peak (scale is
+// 'rate', titles per 1,000, unless the link asks for 'each at its peak'). Read with parseTerms so a
 // hand-edited URL is cleaned the same way the input box is; an unknown department is
 // dropped rather than charting an empty filter.
-export function encodeState(terms, deptName) {
+export function encodeState(terms, deptName, scale = 'rate') {
   const p = new URLSearchParams();
   if (terms.length) p.set('q', terms.join(','));
   if (deptName) p.set('d', deptName);
+  if (scale === 'peak') p.set('scale', 'peak');
   const s = p.toString();
   return s ? `?${s}` : '';
 }
@@ -158,5 +160,5 @@ export function decodeState(search, depts = []) {
   const p = new URLSearchParams(search || '');
   const q = p.get('q');
   const d = depts.indexOf(p.get('d'));
-  return { terms: q == null ? null : parseTerms(q), dept: d };
+  return { terms: q == null ? null : parseTerms(q), dept: d, scale: p.get('scale') === 'peak' ? 'peak' : 'rate' };
 }

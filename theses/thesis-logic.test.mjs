@@ -85,7 +85,13 @@ eq('shortDept keeps other names', L.shortDept('School of Education'), 'School of
 {
   const depts = ['Department of Physics', 'School of Education'];
   const s = L.encodeState(['neural', 'deep learning'], 'School of Education');
-  eq('state round-trips terms and department', L.decodeState(s, depts), { terms: ['neural', 'deep learning'], dept: 1 });
+  eq('state round-trips terms and department', L.decodeState(s, depts), { terms: ['neural', 'deep learning'], dept: 1, scale: 'rate' });
+  // "Each at its peak" rides in the link, so a shared chart opens on the scale it was sent in.
+  const sp = L.encodeState(['neural'], 'Department of Physics', 'peak');
+  eq('a peak-scale link round-trips', L.decodeState(sp, depts), { terms: ['neural'], dept: 0, scale: 'peak' });
+  eq('the default scale stays out of the link', L.encodeState(['neural'], '', 'rate'), '?q=neural');
+  eq('a peak link without words still says so', L.encodeState([], '', 'peak'), '?scale=peak');
+  eq('an unknown scale reads as the rate', L.decodeState('?q=x&scale=log', depts).scale, 'rate');
   eq('no state is empty', L.encodeState([], ''), '');
   eq('an unknown department is dropped', L.decodeState('?q=x&d=Nope', depts).dept, -1);
   eq('no q is null terms', L.decodeState('', depts).terms, null);
@@ -97,6 +103,8 @@ eq('shortDept keeps other names', L.shortDept('School of Education'), 'School of
   const D = await import('../ngram-logic.js');
   ok('niceTicks is shared, not copied', L.niceTicks === D.niceTicks);
   ok('fmtRate is shared, not copied', L.fmtRate === D.fmtRate);
+  ok('relative is shared, not copied', L.relative === D.relative);
+  eq('PEAK_TICKS run 0-100', L.PEAK_TICKS, [0, 25, 50, 75, 100]);
 }
 
 // --- the shipped data, read the way the page reads it ---------------------------------
@@ -141,6 +149,21 @@ if (existsSync(dir + 'theses.tsv')) {
   const ml = r('machine learning');
   ok('"machine learning" is far commoner in 2020-24 than 1990-94', at(ml, 2020) > 5 * (at(ml, 1990) || 0.01), `${at(ml, 1990)} vs ${at(ml, 2020)}`);
   ok('no ordinary word matches every title', at(r('the'), 2000) < 900);
+  // The reason the peak scale exists here: in "Computers arrive", "internet" peaks near a
+  // quarter of computer*'s height and drew as a flat line along the axis. On the peak scale
+  // every preset word that was ever used tops out at exactly 100%, and nowhere above it.
+  for (const p of meta.presets) {
+    for (const t of p.terms) {
+      const rel = L.relative(r(t));
+      const top = Math.max(...rel.filter((v) => v != null));
+      ok(`preset "${p.label}": "${t}" peaks at 100% on the peak scale`, Math.abs(top - 100) < 1e-9, `top ${top}`);
+    }
+  }
+  {
+    const [c, i] = [r('computer*'), r('internet')];
+    const cm = Math.max(...c.filter((v) => v != null)), im = Math.max(...i.filter((v) => v != null));
+    ok('"internet" is under half of computer*\'s height on the rate scale (else the peak scale is moot)', im < cm / 2, `${im} vs ${cm}`);
+  }
   for (const p of meta.presets) {
     ok(`preset "${p.label}" terms are already clean`, p.terms.every((t) => L.cleanTerm(t) === t), JSON.stringify(p.terms));
     ok(`preset "${p.label}" is found`, p.terms.every((t) => L.counts(rows, bs, t).some((c) => c > 0)));

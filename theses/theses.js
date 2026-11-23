@@ -1,6 +1,6 @@
 import {
   bins, binLabel, shortDept, parseTerms, parseRows, totals, counts, rates, examples, peak, niceTicks,
-  fmtRate, encodeState, decodeState, VIEW, fitLabels,
+  fmtRate, encodeState, decodeState, VIEW, fitLabels, relative, PEAK_TICKS,
 } from './thesis-logic.js';
 
 const $ = (id) => document.getElementById(id);
@@ -21,6 +21,7 @@ let META = null, ROWS = [], BINS = [];
 let dept = -1;            // index into META.depts, -1 for every department
 let TOT = [];             // titles per bin for the current department
 let current = [];         // [{term, slot, counts, rates}]
+let scale = 'rate';       // 'rate' (titles per 1,000) or 'peak' (each line as % of its own peak)
 let unpin = () => {};
 
 const el = (tag, attrs = {}, text) => {
@@ -41,7 +42,7 @@ function show(terms, { push = true } = {}) {
   for (const b of document.querySelectorAll('#presets button')) {
     b.setAttribute('aria-pressed', String(b.dataset.terms === terms.join(',')));
   }
-  if (push) history.replaceState(null, '', location.pathname + encodeState(terms, dept >= 0 ? META.depts[dept] : ''));
+  if (push) history.replaceState(null, '', location.pathname + encodeState(terms, dept >= 0 ? META.depts[dept] : '', scale));
   TOT = totals(ROWS, BINS, dept);
   current = terms.map((term, slot) => {
     const cs = counts(ROWS, BINS, term, dept);
@@ -63,24 +64,26 @@ function draw() {
   const narrow = W < 520;
   H = narrow ? 250 : 320;
   // The right margin fits the end-of-line labels; on a phone it takes a third of the chart at most.
-  const labelled = current.filter((s) => s.rates[s.rates.length - 1] != null);
+  const peakMode = scale === 'peak';
+  const vals = new Map(current.map((s) => [s, peakMode ? relative(s.rates) : s.rates]));
+  const labelled = current.filter((s) => vals.get(s)[s.rates.length - 1] != null);
   const fit = fitLabels(labelled.map((s) => s.term), measureLabel, { max: narrow ? Math.round(W / 3) : 150 });
   M.r = fit.margin;
   const iw = W - M.l - M.r, ih = H - M.t - M.b;
-  const max = Math.max(0, ...current.flatMap((s) => s.rates.filter((r) => r != null)));
-  const ticks = niceTicks(max);
+  const max = Math.max(0, ...current.flatMap((s) => vals.get(s).filter((r) => r != null)));
+  const ticks = peakMode ? PEAK_TICKS : niceTicks(max);
   const top = ticks[ticks.length - 1];
   const x = (i) => M.l + (iw * i) / (BINS.length - 1);
   const y = (r) => M.t + ih - (ih * r) / top;
   const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img',
     'aria-label': current.length
-      ? `Line chart, thesis titles per 1,000 containing ${current.map((s) => s.term).join(', ')}, ${BINS[0].y0} to ${BINS.at(-1).y1}`
+      ? `Line chart, ${peakMode ? 'each word as a percent of its own peak in ' : ''}thesis titles per 1,000 containing ${current.map((s) => s.term).join(', ')}, ${BINS[0].y0} to ${BINS.at(-1).y1}`
       : 'Empty chart' });
 
   const ax = el('g', { class: 'ax' });
   for (const t of ticks) {
     ax.append(el('line', { x1: M.l, x2: W - M.r, y1: y(t), y2: y(t), class: t === 0 ? 'base' : '' }));
-    ax.append(el('text', { x: M.l - 6, y: y(t) + 4, 'text-anchor': 'end' }, fmtRate(t)));
+    ax.append(el('text', { x: M.l - 6, y: y(t) + 4, 'text-anchor': 'end' }, peakMode ? `${t}%` : fmtRate(t)));
   }
   BINS.forEach((b, i) => {
     const round = b.y0 - (b.y0 % 5);
@@ -92,15 +95,16 @@ function draw() {
   const labels = [];
   for (const s of current) {
     const c = COLORS[s.slot];
+    const v = vals.get(s);
     let d = '', pen = false;
-    s.rates.forEach((r, i) => {
+    v.forEach((r, i) => {
       if (r == null) { pen = false; return; }
       d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)},${y(r).toFixed(1)}`;
       pen = true;
     });
     svg.append(el('path', { d, class: 'ln', stroke: c }));
     const last = s.rates.length - 1;
-    if (s.rates[last] != null) labels.push({ s, y: y(s.rates[last]) });
+    if (v[last] != null) labels.push({ s, y: y(v[last]) });
     const p = peak(s.rates);
     const li = document.createElement('li');
     li.innerHTML = '<span class="sw"></span><span></span><span class="peak"></span>';
@@ -136,8 +140,8 @@ function draw() {
     if (i < 0 || !current.length) { cross.setAttribute('visibility', 'hidden'); dots.replaceChildren(); tip.classList.remove('on'); return; }
     cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i));
     cross.setAttribute('visibility', 'visible');
-    dots.replaceChildren(...current.filter((s) => s.rates[i] != null)
-      .map((s) => el('circle', { cx: x(i), cy: y(s.rates[i]), r: 4.5, class: 'dot', fill: COLORS[s.slot] })));
+    dots.replaceChildren(...current.filter((s) => vals.get(s)[i] != null)
+      .map((s) => el('circle', { cx: x(i), cy: y(vals.get(s)[i]), r: 4.5, class: 'dot', fill: COLORS[s.slot] })));
     const b = BINS[i];
     tip.innerHTML = `<h3></h3><table></table>` +
       `<div style="font-size:11px;color:var(--ink-3);margin-top:4px"></div><div class="ex"></div>`;
@@ -150,7 +154,8 @@ function draw() {
       tr.innerHTML = '<td><span class="sw"></span></td><td class="v"></td>';
       tr.querySelector('.sw').style.background = COLORS[s.slot];
       tr.children[0].append(s.term);
-      tr.children[1].textContent = `${fmtRate(s.rates[i])}  (${s.counts[i].toLocaleString('en-US')})`;
+      const pct = peakMode && vals.get(s)[i] != null ? ` · ${Math.round(vals.get(s)[i])}% of peak` : '';
+      tr.children[1].textContent = `${fmtRate(s.rates[i])}  (${s.counts[i].toLocaleString('en-US')})${pct}`;
       tb.append(tr);
     }
     const ex = tip.querySelector('.ex');
@@ -255,6 +260,20 @@ async function main() {
   let lastW = innerWidth;
   addEventListener('resize', () => { if (innerWidth !== lastW) { lastW = innerWidth; draw(); } });
   const st = decodeState(location.search, META.depts);
+  const setScale = (v) => {
+    scale = v;
+    for (const b of document.querySelectorAll('#scaleBtns button')) b.setAttribute('aria-pressed', String(b.dataset.scale === scale));
+    $('chartTitle').textContent = scale === 'peak'
+      ? 'Each word as a percent of its own peak, in thesis titles per 1,000' : 'Thesis titles containing each word, per 1,000 titles';
+  };
+  setScale(st.scale);
+  for (const b of document.querySelectorAll('#scaleBtns button')) {
+    b.addEventListener('click', () => {
+      setScale(b.dataset.scale);
+      history.replaceState(null, '', location.pathname + encodeState(terms(), dept >= 0 ? META.depts[dept] : '', scale));
+      unpin(); draw();
+    });
+  }
   dept = st.dept;
   sel.value = String(dept);
   show(st.terms && st.terms.length ? st.terms : META.presets[0].terms, { push: !!st.terms });
