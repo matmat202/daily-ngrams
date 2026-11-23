@@ -22,7 +22,7 @@ export const WEB_LAST = '2026-10-25';
 // Five-year bins. Each bin's dates are clipped to its source's run, so the first and the
 // last of each are partial, and that is why every count is divided by its own bin's total.
 // src 'print' is the scanned archive (1892-2014), 'web' is stanforddaily.com (2015-).
-const clipBins = (src, first, last) => {
+export const clipBins = (src, first, last) => {
   const out = [];
   const y0 = +first.slice(0, 4), yN = +last.slice(0, 4);
   for (let y = y0 - (y0 % 5); y <= yN; y += 5) {

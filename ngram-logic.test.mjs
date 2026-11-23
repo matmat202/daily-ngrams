@@ -8,7 +8,12 @@ let pass = 0, fail = 0;
 const ok = (name, cond, extra = '') => {
   if (cond) pass++; else { fail++; console.log(`FAIL ${name} ${extra}`); }
 };
-const eq = (name, a, b) => ok(name, JSON.stringify(a) === JSON.stringify(b), `got ${JSON.stringify(a)} want ${JSON.stringify(b)}`);
+// JSON.stringify turns NaN and +-Infinity into `null`, so a plain stringify compare cannot
+// tell a NaN from a deliberate null -- and this module returns null for "not counted". That
+// blindness let `relative`'s `max > 0` guard be flipped to `max >= 0` (0/0 -> NaN) with every
+// test still passing. J() tags non-finite numbers so they can never read as null.
+const J = (v) => JSON.stringify(v, (_k, x) => (typeof x === 'number' && !Number.isFinite(x) ? `#${x}` : x));
+const eq = (name, a, b) => ok(name, J(a) === J(b), `got ${J(a)} want ${J(b)}`);
 
 // --- bins ---------------------------------------------------------------------------
 const PRINT = L.BINS.filter((b) => b.src === 'print'), WEB = L.BINS.filter(L.isWeb);
@@ -401,6 +406,59 @@ ok('no preset word that the index stems into another word', !D.presets.some((p) 
   eq('scale: an unknown value is the default', L.decodeScale('?scale=log'), 'rate');
   eq('scale: empty search is the default', L.decodeScale(''), 'rate');
   eq('scale: words still decode beside it', L.decodeState('?q=big%20game,axe&scale=peak'), ['big game', 'axe']);
+}
+
+// --- boundaries the round-number tests never reached (2026-11-23 mutation sweep) ---------
+{
+  // relative(): the guard is `max > 0`, and every existing test has a peak well above 1,
+  // so `max > 1` passed all of them. A rare phrase really can peak below 1 per 10,000.
+  eq('relative: a peak below 1 still scales to 100', L.relative([0.4, 0.8]), [50, 100]);
+  eq('relative: a peak of exactly 1 is a peak, not "never printed"', L.relative([0.25, 1]), [25, 100]);
+  eq('relative: a sub-1 peak beside a zero', L.relative([0, 0.5]), [0, 100]);
+  // The all-zero case is already tested above; assert the NaN explicitly, because the old
+  // JSON.stringify compare could not tell 0/0 from the null it is supposed to return.
+  ok('relative: an all-zero series is null, never NaN',
+     L.relative([0, 0, 0]).every((v) => v === null), JSON.stringify(L.relative([0, 0, 0])));
+
+  // clipBins(): a five-year bin ends 4 years after it starts, never 5, or the bins overlap.
+  for (const b of L.BINS) {
+    const endY = +b.end.slice(0, 4);
+    ok(`bin ${L.binLabel(b)} ends in its own last year`, endY === b.y1, `end ${b.end} y1 ${b.y1}`);
+  }
+  for (let i = 0; i + 1 < L.BINS.length; i++) {
+    const a = L.BINS[i], c = L.BINS[i + 1];
+    if (a.src !== c.src) continue;
+    ok(`bin ${L.binLabel(a)} does not overlap ${L.binLabel(c)}`, a.end < c.start, `${a.end} vs ${c.start}`);
+  }
+
+  // clipBins() direct: the shipped FIRST/LAST never land inside the window where the bin-end
+  // comparison can flip, so with BINS alone `${y + 4}` and `${y + 5}` in the CONDITION pick the
+  // same branch for every bin. Feeding it a `last` that IS a five-year end exercises the
+  // boundary the shipped data cannot reach. (clipBins is exported only so this can be tested.)
+  {
+    const b = L.clipBins('print', '1990-01-01', '1994-12-31');
+    eq('clipBins: a run ending exactly on a bin end is one whole bin',
+       b.map((x) => [x.start, x.end]), [['1990-01-01', '1994-12-31']]);
+    const c = L.clipBins('print', '1990-01-01', '1995-06-30');
+    eq('clipBins: one day past a bin end opens the next bin, clipped',
+       c.map((x) => [x.start, x.end]), [['1990-01-01', '1994-12-31'], ['1995-01-01', '1995-06-30']]);
+    const d = L.clipBins('web', '1992-03-04', '1999-12-31');
+    eq('clipBins: a mid-bin start keeps the real first day and five-year ends after it',
+       d.map((x) => [x.start, x.end, x.y0, x.y1]),
+       [['1992-03-04', '1994-12-31', 1992, 1994], ['1995-01-01', '1999-12-31', 1995, 1999]]);
+  }
+
+  // tailPlan(): `last.y0 - (last.y0 % 5)` rounds the last bin down to its five-year start.
+  // Every shipped bin starts on a multiple of 5, which makes `-` and `+` give the same
+  // answer, so the sweep could not tell them apart. A last bin that does NOT start on a
+  // multiple of 5 is reachable the moment WEB_FIRST moves, and there the two differ.
+  const offBin = { y0: 2026, y1: 2026, start: '2026-01-01', end: '2026-10-25', src: 'web' };
+  const off = L.tailPlan([offBin], '2030-06-01');
+  eq('tailPlan clamps an off-cycle last bin to 2029, not 2031', off && off.bin.end, '2029-12-31');
+  // and pin the premise itself, so this stays honest if the data moves
+  ok('every bin starts on its own five-year boundary or the series start',
+     L.BINS.every((b) => b.y0 % 5 === 0 || b.start === L.FIRST || b.start === L.WEB_FIRST),
+     JSON.stringify(L.BINS.map((b) => b.y0)));
 }
 
 console.log(`${fail ? 'FAILED' : 'ok'}: ${pass} passed, ${fail} failed`);
